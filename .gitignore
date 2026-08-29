@@ -1,0 +1,9 @@
+# Build output from the BigWigs packager
+.release/
+*.zip
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store

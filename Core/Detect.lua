@@ -370,5 +370,25 @@ function Detect:ScanReport()
             npcID, self.seenNPCs[npcID] or "?", inData and "in Data/" or "<< NOT IN Data/")
     end
 
+    -- Your own buffs, by the exact name the client reports. A wrong entry in
+    -- Data/Consumables.lua reads as someone missing a flask they are holding,
+    -- and this is the only way to see the real spelling.
+    local C = PPRC.Consumables
+    local known = {}
+    for _, lookup in pairs({ C.FLASKS, C.ELIXIRS, C.FOOD, C.SOULSTONE }) do
+        for name in pairs(lookup) do known[name] = true end
+    end
+
+    lines[#lines + 1] = "your buffs (check these against Data/Consumables.lua):"
+    local auras = PPRC.Adapter:AuraDump("player")
+    if #auras == 0 then
+        lines[#lines + 1] = "  (none readable)"
+    end
+    for _, aura in ipairs(auras) do
+        lines[#lines + 1] = string.format("  %-34s %-8s %s",
+            aura.name, aura.spellID and tostring(aura.spellID) or "?",
+            known[aura.name] and "recognised" or "")
+    end
+
     return lines
 end

@@ -1160,6 +1160,23 @@ local function suiteDetect(profile, opts)
         end)
     end)
 
+    it("dumps your own buffs by exact name, flagging the recognised ones", function()
+        scenario(opts, function(addon, env)
+            env.units.player.auras = {
+                { name = "Flask of Relentless Assault", spellId = 28520 },
+                { name = "Arcane Intellect",            spellId = 27126 },
+            }
+            local report = table.concat(addon.Detect:ScanReport(), "\n")
+
+            truthy(report:find("Flask of Relentless Assault", 1, true), "exact name shown")
+            truthy(report:find("28520", 1, true), "spell id shown")
+            truthy(report:find("Arcane Intellect", 1, true), "unrecognised buffs shown too")
+            -- The flask is in Data/Consumables.lua; the intellect buff is not.
+            local flaskLine = report:match("(Flask of Relentless Assault[^\n]*)")
+            truthy(flaskLine:find("recognised", 1, true), "known name flagged: " .. tostring(flaskLine))
+        end)
+    end)
+
     it("names the active tier for each chain", function()
         scenario(opts, function(addon, env)
             addon.State:StartTest("hyjal_winterchill")

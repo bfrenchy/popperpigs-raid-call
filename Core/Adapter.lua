@@ -417,6 +417,39 @@ function A:UnitHasAura(unit, lookup)
     return false
 end
 
+-- Every aura on a unit, by exact name, for /pprc scan. A wrong entry in
+-- Data/Consumables.lua shows up as a false negative on the readiness board --
+-- someone with a flask reading as missing one -- and the only way to fix that
+-- is to see the names the client actually reports.
+function A:AuraDump(unit)
+    local names = {}
+    if not Cap.auras or not unit or not UnitExists(unit) then return names end
+
+    for i = 1, MAX_AURA_SLOTS do
+        local name, spellID
+
+        if Cap.auraModern then
+            local ok, data = pcall(_G.C_UnitAuras.GetAuraDataByIndex, unit, i, "HELPFUL")
+            if not ok or type(data) ~= "table" then break end
+            name, spellID = data.name, data.spellId
+        else
+            local packed = { pcall(_G.UnitAura, unit, i, "HELPFUL") }
+            if not packed[1] or packed[2] == nil then break end
+            table.remove(packed, 1)
+            -- Signature-agnostic: the name is the first string return, the
+            -- spell id the last number.
+            for j = 1, #packed do
+                if not name and type(packed[j]) == "string" then name = packed[j] end
+                if type(packed[j]) == "number" then spellID = packed[j] end
+            end
+        end
+
+        if name then names[#names + 1] = { name = name, spellID = spellID } end
+    end
+
+    return names
+end
+
 -- ---------------------------------------------------------------------------
 -- Instance identity
 -- ---------------------------------------------------------------------------
