@@ -1776,6 +1776,348 @@ local function suiteReadiness(profile, opts)
     end)
 end
 
+-- A four-corner encounter, so M6 can be exercised before Black Temple data
+-- lands in M7. Mirrors the Teron layout the plan uses as its worked example.
+local function registerTeronFixture(addon)
+    addon:RegisterInstance({
+        id = "fixture_bt", mapID = 8888, name = "Fixture Temple", order = { "fx_teron" },
+        encounters = { fx_teron = {
+            name = "Teron Gorefiend", tanks = 1, npcID = 22871,
+            steps = {
+                { id = "trash", label = "Promenade", advance = "manual" },
+                { id = "boss",  label = "Teron Gorefiend", advance = "manual", posmap = "teron",
+                  call = "Marked? Run to YOUR corner at 10s.",
+                  brief = {
+                      { spell = "Shadow of Death", text = "Marks a player; after 55s they die and spawn four constructs." },
+                      { spell = "Ghost action bar", text = "Slow the four, then burn them before the ghost expires." },
+                  } },
+            },
+        } },
+    })
+end
+
+local function suitePosMap(profile, opts)
+    group("PosMap [" .. profile .. "]")
+
+    it("maps raid target icon indices onto the icon sheet", function()
+        scenario(opts, function(addon)
+            local l, r, t, b = addon.PosMap:MarkCoords(1)   -- star, top-left
+            eq(l, 0, "star left"); eq(t, 0, "star top"); eq(r, 0.25, "star right")
+
+            l, r, t, b = addon.PosMap:MarkCoords(8)         -- skull, second row end
+            eq(l, 0.75, "skull left"); eq(t, 0.25, "skull top"); eq(b, 0.5, "skull bottom")
+        end)
+    end)
+
+    it("indexes every layout's slots by id", function()
+        scenario(opts, function(addon)
+            local teron = addon.PosMap:Layout("teron")
+            truthy(teron, "layout present")
+            eq(#teron.slots, 4, "four corners")
+            eq(teron.slotsByID.corner_a.where, "NW, by the door", "cardinal plus landmark")
+            eq(teron.slotsByID.corner_a.mark, 8, "skull on corner A")
+        end)
+    end)
+
+    it("reports which positions are still empty", function()
+        scenario(opts, function(addon)
+            eq(#addon.PosMap:EmptySlots("teron", {}), 4, "all empty")
+            eq(#addon.PosMap:EmptySlots("teron", { corner_a = "Vexmoor", corner_b = "Aeliswyn" }), 2, "two filled")
+            eq(#addon.PosMap:EmptySlots("teron", {
+                corner_a = "A", corner_b = "B", corner_c = "C", corner_d = "D" }), 0, "all filled")
+        end)
+    end)
+
+    it("renders a layout and hides an unknown one instead of erroring", function()
+        scenario(opts, function(addon)
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            truthy(addon.PosMap:Render(map, "teron", {}), "known layout renders")
+            eq(map.landmarks.top:GetText(), "ENTRANCE / DOOR", "landmark drawn")
+            eq(map.bossLabel:GetText(), "TERON", "boss labelled")
+            eq(map.slots[1].who:GetText(), "- empty -", "empty slot flagged")
+
+            falsy(addon.PosMap:Render(map, "no_such_room", {}), "unknown layout refused")
+            falsy(map:IsShown(), "and hidden")
+        end)
+    end)
+
+    it("puts the diagram's icons on the assigned players", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true },
+                { name = "Vexmoor",   class = "WARLOCK" },
+                { name = "Aeliswyn",  class = "MAGE" },
+            })
+            local applied, failed = addon.PosMap:ApplyMarks("teron",
+                { corner_a = "Vexmoor", corner_b = "Aeliswyn" })
+
+            eq(applied, 2, "both marked")
+            eq(failed, 0, "no failures")
+            eq(env.marks.raid2, 8, "Vexmoor got the skull")
+            eq(env.marks.raid3, 7, "Aeliswyn got the cross")
+        end)
+    end)
+
+    it("reports failure rather than pretending, when marking is refused", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true },
+                { name = "Vexmoor",   class = "WARLOCK" },
+            })
+            env.raidTargetsBlocked = true
+
+            local applied, failed = addon.PosMap:ApplyMarks("teron", { corner_a = "Vexmoor" })
+            eq(applied, 0, "nothing applied")
+            eq(failed, 1, "and it said so")
+        end)
+    end)
+
+    it("counts someone who left the raid as a failure, not a mark", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            local applied, failed = addon.PosMap:ApplyMarks("teron", { corner_a = "Ghostperson" })
+            eq(applied, 0, "nobody to mark")
+            eq(failed, 1, "reported")
+        end)
+    end)
+end
+
+local function suiteRosterUI(profile, opts)
+    group("RosterUI [" .. profile .. "]")
+
+    local function teronRaid(env)
+        env.buildRaid({
+            { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true, role = "TANK" },
+            { name = "Vexmoor",   class = "WARLOCK", role = "DAMAGER" },
+            { name = "Aeliswyn",  class = "MAGE",    role = "DAMAGER" },
+            { name = "Kethran",   class = "HUNTER" },   -- role NONE
+            { name = "Brannoc",   class = "ROGUE",   role = "DAMAGER" },
+        })
+    end
+
+    -- The plan's own M6 acceptance scenario.
+    it("drags four raiders onto Teron corners and pushes", function()
+        scenario(opts, function(addon, env)
+            teronRaid(env)
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")
+            addon.State:GoToStep(2, "local")
+            addon.State.testMode = false
+            addon.RosterUI:Show()
+
+            addon.RosterUI:Select("Vexmoor");  addon.RosterUI:OnSlotClick("corner_a")
+            addon.RosterUI:Select("Aeliswyn"); addon.RosterUI:OnSlotClick("corner_b")
+            addon.RosterUI:Select("Kethran");  addon.RosterUI:OnSlotClick("corner_c")
+            addon.RosterUI:Select("Brannoc");  addon.RosterUI:OnSlotClick("corner_d")
+
+            local assignments = addon.Roster:Assignments()
+            eq(assignments.corner_a, "Vexmoor", "corner A")
+            eq(assignments.corner_d, "Brannoc", "corner D")
+            eq(#addon.PosMap:EmptySlots("teron", assignments), 0, "no gaps")
+
+            truthy(addon.RosterUI:Push(), "pushed with every corner filled")
+            drainAddon(env, addon)
+            truthy(#env.addonMessages > 0, "assignments went out")
+        end)
+    end)
+
+    it("blocks a push while a position is empty, until it is confirmed", function()
+        scenario(opts, function(addon, env)
+            teronRaid(env)
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")
+            addon.State:GoToStep(2, "local")
+            addon.State.testMode = false
+            addon.RosterUI:Show()
+
+            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("corner_a")
+
+            falsy(addon.RosterUI:Push(), "first push refused")
+            eq(addon.RosterUI.pushBtn._label:GetText(), "PUSH ANYWAY?", "asks for confirmation")
+            truthy(addon.RosterUI.footerNote:GetText():find("3 positions still empty", 1, true), "says how many")
+
+            truthy(addon.RosterUI:Push(), "second push goes through")
+        end)
+    end)
+
+    it("moves a raider rather than cloning them into two positions", function()
+        scenario(opts, function(addon, env)
+            teronRaid(env)
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")
+            addon.State:GoToStep(2, "local")
+            addon.RosterUI:Show()
+
+            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("corner_a")
+            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("corner_c")
+
+            local assignments = addon.Roster:Assignments()
+            isNil(assignments.corner_a, "left the old corner")
+            eq(assignments.corner_c, "Vexmoor", "took the new one")
+        end)
+    end)
+
+    it("clears a position when a slot is clicked with nobody selected", function()
+        scenario(opts, function(addon, env)
+            teronRaid(env)
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")
+            addon.State:GoToStep(2, "local")
+            addon.RosterUI:Show()
+
+            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("corner_a")
+            eq(addon.Roster:Assignments().corner_a, "Vexmoor", "assigned")
+
+            addon.RosterUI:OnSlotClick("corner_a")
+            isNil(addon.Roster:Assignments().corner_a, "cleared")
+        end)
+    end)
+
+    it("shows an unset role as unset rather than filling it in from class", function()
+        scenario(opts, function(addon, env)
+            teronRaid(env)
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")
+            addon.RosterUI:Show()
+
+            local rows = addon.RosterUI.list.rows
+            local byName = {}
+            for i = 1, 5 do byName[rows[i]._name] = rows[i].right:GetText() end
+
+            truthy(byName["Popperpig"]:find("TANK", 1, true), "role shown when the game has one")
+            truthy(byName["Kethran"]:find("unset", 1, true), "and left unset when it does not")
+            falsy(byName["Kethran"]:find("DAMAGER", 1, true), "never inferred from class")
+        end)
+    end)
+
+    it("refuses a push from someone without rank", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true } })
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")
+            addon.State:GoToStep(2, "local")
+            addon.State.testMode = false
+            addon.RosterUI:Show()
+
+            addon.RosterUI._confirmPush = true   -- past the empty-slot guard
+            falsy(addon.RosterUI:Push(), "refused")
+            truthy(table.concat(env.printed, "\n"):find("lead or assist", 1, true), "explained")
+        end)
+    end)
+
+    it("says there is nothing to push on a step with no diagram", function()
+        scenario(opts, function(addon, env)
+            teronRaid(env)
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")   -- step 1 has no posmap
+            addon.RosterUI:Show()
+
+            falsy(addon.RosterUI:Push(), "refused")
+            truthy(addon.RosterUI.footerNote:GetText():find("no diagram", 1, true), "and says why")
+        end)
+    end)
+end
+
+local function suiteBriefing(profile, opts)
+    group("Briefing [" .. profile .. "]")
+
+    it("renders mechanics and the words to say", function()
+        scenario(opts, function(addon)
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")
+            addon.State:GoToStep(2, "local")
+            addon.Briefing:Show()
+
+            eq(addon.Briefing.spells[1].name:GetText(), "SHADOW OF DEATH", "first mechanic")
+            truthy(addon.Briefing.spells[1].text:GetText():find("four constructs", 1, true), "its detail")
+            truthy(addon.Briefing.sayText:GetText():find("YOUR corner", 1, true), "the literal call")
+            truthy(addon.Briefing.frame.title:GetText():find("1 TANK", 1, true), "tank count in the header")
+        end)
+    end)
+
+    it("dismisses itself on the pull", function()
+        scenario(opts, function(addon, env)
+            registerTeronFixture(addon)
+            addon.State:StartTest("fx_teron")
+            addon.State:GoToStep(2, "local")
+            addon.Briefing:Show()
+            truthy(addon.Briefing.frame:IsShown(), "open before the pull")
+
+            env.fire("PLAYER_REGEN_DISABLED")
+            falsy(addon.Briefing.frame:IsShown(), "gone when combat starts")
+        end)
+    end)
+
+    it("lights only the raider's own position on their client", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true },
+                { name = "Vexmoor",   class = "WARLOCK" },
+            })
+            registerTeronFixture(addon)
+            addon.State:Set("fx_teron", 2, "remote")
+            addon.db.assignments = { corner_a = "Vexmoor", corner_b = "Popperpig" }
+            addon.Briefing:Show()
+
+            truthy(addon.Briefing.posHeading:GetText():find("YOURS IS LIT", 1, true), "raider view")
+            -- corner_b is ours: full alpha. corner_a is someone else's: dimmed.
+            eq(addon.Briefing.map.slots[2].icon:GetAlpha(), 1, "own slot lit")
+            eq(addon.Briefing.map.slots[1].icon:GetAlpha(), 0.25, "others dimmed")
+        end)
+    end)
+
+    it("shows the full chart to whoever is driving", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            registerTeronFixture(addon)
+            addon.State:Set("fx_teron", 2, "local")
+            addon.Briefing:Show()
+
+            eq(addon.Briefing.posHeading:GetText(), "POSITIONING", "no personal filter for the RL")
+            eq(addon.Briefing.map.slots[1].icon:GetAlpha(), 1, "everything lit")
+        end)
+    end)
+
+    it("opens when a raid leader pushes one", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true },
+                { name = "Sollura",   class = "PALADIN", rank = 2 },
+            })
+            registerTeronFixture(addon)
+
+            local frame = addon.Codec.Frame("BRIEF", { e = "fx_teron", step = "boss" })[1]
+            env.fire("CHAT_MSG_ADDON", "PPRC", frame, "RAID", "Sollura")
+
+            truthy(addon.Briefing.frame:IsShown(), "opened for the raider")
+            eq(addon.State.encounterID, "fx_teron", "and switched to the encounter")
+        end)
+    end)
+
+    it("ignores a briefing pushed by someone without rank", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true },
+                { name = "Kethran",   class = "HUNTER",  rank = 0 },
+            })
+            registerTeronFixture(addon)
+
+            local frame = addon.Codec.Frame("BRIEF", { e = "fx_teron", step = "boss" })[1]
+            env.fire("CHAT_MSG_ADDON", "PPRC", frame, "RAID", "Kethran")
+            falsy(addon.Briefing.frame:IsShown(), "not opened")
+        end)
+    end)
+
+    it("stays usable on a step with no mechanic notes", function()
+        scenario(opts, function(addon)
+            addon.State:StartTest("hyjal_winterchill")   -- wave 1, no brief block
+            addon.Briefing:Show()
+            truthy(addon.Briefing.spells[1].text:GetText():find("No mechanic notes", 1, true), "says so")
+            truthy(addon.Briefing.sayText:GetText():find("Ghouls only", 1, true), "still shows the call")
+        end)
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -1798,6 +2140,9 @@ for _, profile in ipairs(PROFILES) do
     suiteComm(profile.name, profile.opts)
     suiteRoster(profile.name, profile.opts)
     suiteReadiness(profile.name, profile.opts)
+    suitePosMap(profile.name, profile.opts)
+    suiteRosterUI(profile.name, profile.opts)
+    suiteBriefing(profile.name, profile.opts)
     suiteRateLimit(profile.name, profile.opts)
     suiteCallBoard(profile.name, profile.opts)
     suiteCommands(profile.name, profile.opts)

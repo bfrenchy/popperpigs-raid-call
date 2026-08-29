@@ -25,6 +25,7 @@ Core\StateMachine.lua
 # patch fix is a data edit that can ship the same night.
 Data\Consumables.lua
 Data\Calls.lua
+Data\Positions.lua
 Data\Hyjal.lua
 
 # --- Core that consumes Data --------------------------------------------
@@ -35,9 +36,12 @@ Core\Comm.lua
 # --- UI -----------------------------------------------------------------
 # All plain CreateFrame("Frame"). No secure templates, so none of this can taint.
 UI\Widgets.lua
+UI\PosMap.lua
 UI\HUD.lua
 UI\CallBoard.lua
 UI\Readiness.lua
+UI\Roster.lua
+UI\Briefing.lua
 
 # --- Commands last: it wires every module above into /pprc ---------------
 Core\Commands.lua

@@ -70,6 +70,14 @@ register("check", "/pprc check", "Announce one readiness summary line to the rai
     if PPRC.Roster then PPRC:Print(PPRC.Roster:SummaryLine()) end
 end)
 
+register("assign", "/pprc assign", "Show or hide the assignment panel.", function()
+    if PPRC.RosterUI then PPRC.RosterUI:Toggle() end
+end)
+
+register("brief", "/pprc brief", "Show or hide the pre-pull briefing for the current step.", function()
+    if PPRC.Briefing then PPRC.Briefing:Toggle() end
+end)
+
 register("lock", "/pprc lock", "Lock or unlock frame dragging.", function()
     PPRC.db.locked = not PPRC.db.locked
     PPRC:Print("frames are now %s", PPRC.db.locked and "|cffc1544alocked|r" or "|cff3fae6funlocked|r")
