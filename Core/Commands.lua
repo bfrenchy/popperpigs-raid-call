@@ -41,6 +41,27 @@ register("hide", "/pprc hide", "Hide the HUD.", function()
     if PPRC.HUD then PPRC.HUD:Hide() end
 end)
 
+register("board", "/pprc board", "Show or hide the call board.", function()
+    if PPRC.CallBoard then PPRC.CallBoard:Toggle() end
+end)
+
+register("echo", "/pprc echo", "Local echo: calls print to your own chat frame and go nowhere near the raid.", function()
+    PPRC.db.localEcho = not PPRC.db.localEcho
+    PPRC:Print("local echo %s%s",
+        PPRC.db.localEcho and "|cff3fae6fon|r" or "|cffc1544aoff|r",
+        PPRC.db.localEcho and " - nothing will be sent to the raid" or "")
+    if PPRC.CallBoard then PPRC.CallBoard:Refresh() end
+end)
+
+register("say", "/pprc say <text>", "Send one line through the throttle, as a raid warning if you have assist.", function(args)
+    local text = table.concat(args, " ")
+    if text == "" then
+        PPRC:Print("usage: /pprc say <text>")
+        return
+    end
+    PPRC.RateLimit:SendCall(text)
+end)
+
 register("lock", "/pprc lock", "Lock or unlock frame dragging.", function()
     PPRC.db.locked = not PPRC.db.locked
     PPRC:Print("frames are now %s", PPRC.db.locked and "|cffc1544alocked|r" or "|cff3fae6funlocked|r")

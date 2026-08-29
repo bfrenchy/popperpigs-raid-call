@@ -681,6 +681,230 @@ local function suiteCommands(profile, opts)
     end)
 end
 
+local function suiteRateLimit(profile, opts)
+    group("RateLimit [" .. profile .. "]")
+
+    -- The plan's M2 acceptance bar, stated as a test.
+    it("ten rapid calls produce no disconnect and no silent drop", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+
+            for i = 1, 10 do addon.RateLimit:SendCall("call " .. i) end
+
+            -- One went out immediately; the other nine are queued, not lost.
+            eq(#env.chat, 1, "only one message hit the wire in the first instant")
+            eq(addon.RateLimit:QueueDepth("chat"), 9, "the rest are queued")
+            eq(addon.RateLimit.lanes.chat.dropped, 0, "nothing dropped")
+
+            -- Drain, and confirm every single one arrives.
+            for _ = 1, 200 do env.advance(0.1, addon) end
+            eq(#env.chat, 10, "all ten delivered")
+            eq(addon.RateLimit:QueueDepth("chat"), 0, "queue empty")
+        end)
+    end)
+
+    it("never exceeds one chat message per 1.5s", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            for i = 1, 6 do addon.RateLimit:SendCall("call " .. i) end
+            for _ = 1, 200 do env.advance(0.1, addon) end
+
+            eq(#env.chat, 6, "all delivered")
+            for i = 2, #env.chat do
+                local gap = env.chat[i].at - env.chat[i - 1].at
+                truthy(gap >= 1.5 - 1e-9, string.format("gap %d was %.2fs", i, gap))
+            end
+        end)
+    end)
+
+    it("collapses a duplicate that is still queued, but allows a deliberate repeat", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+
+            addon.RateLimit:SendCall("SPREAD", "spread")   -- goes out at once
+            addon.RateLimit:SendCall("SPREAD", "spread")   -- queued
+            addon.RateLimit:SendCall("SPREAD", "spread")   -- collapsed into the above
+            eq(addon.RateLimit:QueueDepth("chat"), 1, "double-click collapsed")
+
+            for _ = 1, 60 do env.advance(0.1, addon) end
+            eq(#env.chat, 2, "the deliberate repeat still went out")
+        end)
+    end)
+
+    it("drops loudly, with a count, once the queue is full", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            for i = 1, 40 do addon.RateLimit:SendCall("call " .. i) end
+
+            truthy(addon.RateLimit.lanes.chat.dropped > 0
+                or table.concat(env.printed, "\n"):find("dropped", 1, true),
+                "overflow was reported")
+            eq(addon.RateLimit:QueueDepth("chat"), addon.RateLimit.lanes.chat.maxQueue, "queue capped")
+            truthy(table.concat(env.printed, "\n"):find("dropped", 1, true), "the RL was told in chat")
+        end)
+    end)
+
+    it("routes to raid warning with assist, /raid without, echo when solo", function()
+        scenario(opts, function(addon, env)
+            env.groupSize = 0
+            eq(addon.RateLimit:ChatChannel(), "ECHO", "solo echoes")
+
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true } })
+            eq(addon.RateLimit:ChatChannel(), "RAID", "no assist degrades to /raid")
+
+            env.units.player.rank = 1
+            eq(addon.RateLimit:ChatChannel(), "RAID_WARNING", "assist gets raid warning")
+
+            addon.db.localEcho = true
+            eq(addon.RateLimit:ChatChannel(), "ECHO", "echo mode overrides everything")
+        end)
+    end)
+
+    it("sends nothing to the server in local echo mode", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            addon.db.localEcho = true
+
+            for i = 1, 5 do addon.RateLimit:SendCall("call " .. i) end
+            for _ = 1, 60 do env.advance(0.1, addon) end
+
+            eq(#env.chat, 0, "nothing reached the raid")
+            truthy(table.concat(env.printed, "\n"):find("[echo]", 1, true), "echoed locally instead")
+        end)
+    end)
+
+    it("keeps addon traffic on its own budget, away from the chat lane", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+
+            addon.RateLimit:SendCall("a call")
+            for i = 1, 5 do addon.RateLimit:SendAddon("PPRC", "sync " .. i, "RAID") end
+
+            eq(addon.RateLimit:QueueDepth("chat"), 0, "chat lane unaffected")
+            for _ = 1, 60 do env.advance(0.1, addon) end
+            eq(#env.addonMessages, 5, "sync traffic delivered on its own lane")
+        end)
+    end)
+end
+
+local function suiteCallBoard(profile, opts)
+    group("CallBoard [" .. profile .. "]")
+
+    it("renders this step's calls from data", function()
+        scenario(opts, function(addon)
+            addon.State:StartTest("hyjal_winterchill")
+            addon.State:GoToStep(6, "local")   -- wave6: FAP NOW / OT PEEL
+            addon.CallBoard:Refresh()
+
+            eq(addon.CallBoard.stepButtons[1]._label:GetText(), "FAP NOW", "first step call")
+            eq(addon.CallBoard.stepButtons[2]._label:GetText(), "OT PEEL", "second step call")
+            falsy(addon.CallBoard.stepButtons[3]:IsShown(), "unused buttons hidden")
+        end)
+    end)
+
+    it("sends a step call through the throttle", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            addon.State:StartTest("hyjal_winterchill")
+            addon.State.testMode = false
+            addon.State:GoToStep(6, "local")
+            addon.CallBoard:Refresh()
+
+            addon.CallBoard.stepButtons[1]:GetScript("OnClick")(addon.CallBoard.stepButtons[1])
+            eq(#env.chat, 1, "one message sent")
+            eq(env.chat[1].msg, "FAP NOW", "the step's own words")
+            eq(env.chat[1].channel, "RAID_WARNING", "as a raid warning")
+        end)
+    end)
+
+    it("requires a second click to call a wipe", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            addon.CallBoard:Refresh()
+
+            local wipeButton
+            for _, b in ipairs(addon.CallBoard.standingButtons) do
+                if b._call.id == "wipe" then wipeButton = b end
+            end
+            truthy(wipeButton, "wipe button exists")
+
+            wipeButton:GetScript("OnClick")(wipeButton)
+            eq(#env.chat, 0, "first click sent nothing")
+            eq(wipeButton._label:GetText(), "CONFIRM?", "button asks for confirmation")
+
+            wipeButton:GetScript("OnClick")(wipeButton)
+            eq(#env.chat, 1, "second click sent it")
+            truthy(env.chat[1].msg:find("WIPE IT", 1, true), "the wipe call")
+        end)
+    end)
+
+    it("disarms an unconfirmed wipe after a few seconds", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            addon.CallBoard:Refresh()
+
+            local wipeButton
+            for _, b in ipairs(addon.CallBoard.standingButtons) do
+                if b._call.id == "wipe" then wipeButton = b end
+            end
+
+            wipeButton:GetScript("OnClick")(wipeButton)
+            env.advance(5, addon)
+            eq(wipeButton._label:GetText(), "WIPE", "disarmed itself")
+
+            wipeButton:GetScript("OnClick")(wipeButton)
+            eq(#env.chat, 0, "a later single click does not fire it")
+        end)
+    end)
+
+    it("sends a standing call on one click", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            addon.CallBoard:Refresh()
+
+            local button = addon.CallBoard.standingButtons[1]
+            button:GetScript("OnClick")(button)
+            eq(#env.chat, 1, "sent immediately")
+            truthy(env.chat[1].msg:find("MANA CHECK", 1, true), "the standing call text")
+        end)
+    end)
+
+    it("hides itself for a raider and comes back with assist", function()
+        scenario(opts, function(addon, env)
+            addon.db.shown.callboard = true
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true } })
+            addon.CallBoard:Refresh()
+            falsy(addon.CallBoard.frame:IsShown(), "hidden without assist")
+
+            env.units.player.rank = 1
+            addon.CallBoard:Refresh()
+            truthy(addon.CallBoard.frame:IsShown(), "shown with assist")
+        end)
+    end)
+
+    it("shows in echo mode even without assist, and says so", function()
+        scenario(opts, function(addon, env)
+            addon.db.shown.callboard = true
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true } })
+            addon.db.localEcho = true
+            addon.CallBoard:Refresh()
+
+            truthy(addon.CallBoard.frame:IsShown(), "visible for testing the flow")
+            truthy(addon.CallBoard.frame.title:GetText():find("LOCAL ECHO", 1, true), "title states the mode")
+        end)
+    end)
+
+    it("titles itself with what a click will actually do", function()
+        scenario(opts, function(addon, env)
+            addon.db.shown.callboard = true
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true } })
+            addon.db.localEcho = false
+            addon.CallBoard:Refresh()
+            truthy(addon.CallBoard.frame.title:GetText():find("no assist", 1, true), "warns about degraded channel")
+        end)
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -698,6 +922,8 @@ for _, profile in ipairs(PROFILES) do
     suiteCore(profile.name, profile.opts)
     suiteState(profile.name, profile.opts)
     suiteHUD(profile.name, profile.opts)
+    suiteRateLimit(profile.name, profile.opts)
+    suiteCallBoard(profile.name, profile.opts)
     suiteCommands(profile.name, profile.opts)
 end
 
