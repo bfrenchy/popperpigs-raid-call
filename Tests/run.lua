@@ -357,6 +357,330 @@ local function suiteCore(profile, opts)
     end)
 end
 
+local function suiteState(profile, opts)
+    group("StateMachine [" .. profile .. "]")
+
+    it("registers Hyjal with 5 encounters and 32 waves", function()
+        scenario(opts, function(addon)
+            local hyjal = addon.Instances.hyjal
+            truthy(hyjal, "instance registered")
+            eq(hyjal.mapID, 534, "map id")
+            eq(#hyjal.order, 5, "encounter count")
+
+            local waves = 0
+            for _, encounterID in ipairs(hyjal.order) do
+                local encounter = addon:GetEncounter(encounterID)
+                truthy(encounter, encounterID .. " present")
+                for _, step in ipairs(encounter.steps) do
+                    if step.wave then waves = waves + 1 end
+                end
+            end
+            eq(waves, 32, "total waves across the instance")
+        end)
+    end)
+
+    it("indexes every step's NPC ids for combat-log lookup", function()
+        scenario(opts, function(addon)
+            local hyjal = addon.Instances.hyjal
+            eq(hyjal.byNPC[17767].encounter, "hyjal_winterchill", "winterchill boss id")
+            eq(hyjal.byNPC[17968].encounter, "hyjal_archimonde", "archimonde boss id")
+            truthy(hyjal.byNPC[17916], "ghoul trash id indexed")
+        end)
+    end)
+
+    it("counts unverified data so drift is visible", function()
+        scenario(opts, function(addon)
+            local hyjal = addon.Instances.hyjal
+            truthy(hyjal.total > 0, "steps counted")
+            -- Every Hyjal step ships unverified until confirmed against 2.5.6.
+            eq(hyjal.unverified, hyjal.total, "all steps flagged unverified")
+        end)
+    end)
+
+    it("walks all 8 Winterchill waves with correct NOW and NEXT", function()
+        scenario(opts, function(addon)
+            local State = addon.State
+            truthy(State:StartTest("hyjal_winterchill"), "test mode started")
+
+            local step = State:Current()
+            eq(step.id, "wave1", "starts on wave 1")
+            eq(State:Next().id, "wave2", "next is wave 2")
+
+            for expected = 2, 8 do
+                truthy(State:Advance("local"), "advanced to wave " .. expected)
+                eq(State:Current().id, "wave" .. expected, "now wave " .. expected)
+            end
+
+            truthy(State:Advance("local"), "advanced to boss")
+            eq(State:Current().id, "boss", "lands on the boss step")
+            isNil(State:Next(), "nothing after the boss")
+            eq(State:StepCount(), 9, "8 waves plus the boss")
+        end)
+    end)
+
+    it("rewinds and clamps at both ends instead of falling off", function()
+        scenario(opts, function(addon)
+            local State = addon.State
+            State:StartTest("hyjal_winterchill")
+
+            falsy(State:Back("local"), "cannot go back from step 1")
+            eq(State.stepIndex, 1, "still on step 1")
+
+            State:GoToStep(9, "local")
+            falsy(State:Advance("local"), "cannot advance past the last step")
+            eq(State.stepIndex, 9, "still on the last step")
+
+            State:Back("local")
+            eq(State:Current().id, "wave8", "rewound one step")
+        end)
+    end)
+
+    it("maps a wave number to its step within the current encounter", function()
+        scenario(opts, function(addon)
+            local State = addon.State
+            State:StartTest("hyjal_anetheron")
+
+            truthy(State:GoToWave(6, "detect"), "jumped to wave 6")
+            eq(State:Current().id, "wave6", "correct step")
+            eq(State:Current().detail, "Frost Wyrms", "correct data")
+
+            -- Waves restart per encounter, so 9 is meaningless here.
+            falsy(State:GoToWave(9, "detect"), "unknown wave refused")
+            eq(State:Current().id, "wave6", "state unchanged after a refused jump")
+        end)
+    end)
+
+    it("jumps to the encounter an NPC belongs to", function()
+        scenario(opts, function(addon)
+            local State = addon.State
+            local hyjal = addon.Instances.hyjal
+            State:SetInstance(hyjal)
+            State:SetEncounter("hyjal_winterchill", "local")
+
+            truthy(State:GoToNPC(17842, hyjal, "detect"), "azgalor id recognised")
+            eq(State.encounterID, "hyjal_azgalor", "switched encounter")
+
+            falsy(State:GoToNPC(999999, hyjal, "detect"), "unknown id ignored")
+            eq(State.encounterID, "hyjal_azgalor", "state unchanged")
+        end)
+    end)
+
+    it("fires STATE_CHANGED once per real change and never for a no-op", function()
+        scenario(opts, function(addon)
+            local State, fires = addon.State, 0
+            addon:Listen("STATE_CHANGED", function() fires = fires + 1 end)
+
+            State:StartTest("hyjal_winterchill")
+            eq(fires, 1, "one fire for the initial set")
+
+            State:Advance("local")
+            eq(fires, 2, "one fire per advance")
+
+            State:GoToStep(2, "local")
+            eq(fires, 2, "setting the same step fired nothing")
+        end)
+    end)
+
+    it("carries the change source so remote updates are not echoed back", function()
+        scenario(opts, function(addon)
+            local State, sources = addon.State, {}
+            addon:Listen("STATE_CHANGED", function(_, source) sources[#sources + 1] = source end)
+
+            State:StartTest("hyjal_winterchill")
+            State:Advance("local")
+            State:Advance("remote")
+
+            eq(sources[2], "local", "local change tagged")
+            eq(sources[3], "remote", "remote change tagged")
+        end)
+    end)
+
+    it("refuses an unknown encounter rather than blanking state", function()
+        scenario(opts, function(addon)
+            local State = addon.State
+            State:StartTest("hyjal_winterchill")
+            falsy(State:SetEncounter("does_not_exist", "local"), "refused")
+            eq(State.encounterID, "hyjal_winterchill", "state preserved")
+        end)
+    end)
+
+    it("treats solo and test as controller, and a plain raider as not", function()
+        scenario(opts, function(addon, env)
+            local State = addon.State
+            env.groupSize = 0
+            truthy(State:IsController(), "solo drives its own state")
+
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true } })
+            falsy(State:IsController(), "plain raider does not drive")
+
+            env.units.player.rank = 1
+            truthy(State:IsController(), "assist drives")
+
+            env.units.player.rank = 0
+            State.testMode = true
+            truthy(State:IsController(), "test mode always drives")
+        end)
+    end)
+end
+
+local function suiteHUD(profile, opts)
+    group("HUD [" .. profile .. "]")
+
+    it("builds and renders the current step from data", function()
+        scenario(opts, function(addon)
+            truthy(addon.HUD.frame, "frame built")
+            addon.State:StartTest("hyjal_winterchill")
+            addon.HUD:Refresh()
+
+            eq(addon.HUD.nowTitle:GetText(), "Wave 1", "NOW title")
+            eq(addon.HUD.nowDetail:GetText(), "Ghouls", "NOW detail")
+            truthy(addon.HUD.nowCall:GetText():find("Ghouls only", 1, true), "spoken call rendered")
+            truthy(addon.HUD.nextTitle:GetText():find("Wave 2", 1, true), "NEXT title")
+        end)
+    end)
+
+    it("shows a usable empty state with no encounter", function()
+        scenario(opts, function(addon)
+            addon.HUD:Refresh()
+            eq(addon.HUD.nowTitle:GetText(), "No encounter loaded", "empty title")
+            truthy(addon.HUD.nowDetail:GetText():find("pprc test", 1, true), "points at /pprc test")
+        end)
+    end)
+
+    it("labels the advance button with position in the encounter", function()
+        scenario(opts, function(addon)
+            addon.State:StartTest("hyjal_winterchill")
+            addon.HUD:Refresh()
+            eq(addon.HUD.advanceBtn._label:GetText(), "ADVANCE (1/9)", "step counter")
+            addon.State:Advance("local")
+            eq(addon.HUD.advanceBtn._label:GetText(), "ADVANCE (2/9)", "counter follows state")
+        end)
+    end)
+
+    it("disables back on the first step and advance on the last", function()
+        scenario(opts, function(addon)
+            addon.State:StartTest("hyjal_winterchill")
+            addon.HUD:Refresh()
+            truthy(addon.HUD.backBtn._disabled, "back disabled at the start")
+            falsy(addon.HUD.advanceBtn._disabled, "advance enabled at the start")
+
+            addon.State:GoToStep(9, "local")
+            truthy(addon.HUD.advanceBtn._disabled, "advance disabled at the end")
+            falsy(addon.HUD.backBtn._disabled, "back enabled at the end")
+        end)
+    end)
+
+    it("hides the controls for a raider who cannot drive", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_winterchill")
+            addon.State.testMode = false
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true } })
+            addon.HUD:Refresh()
+            falsy(addon.HUD.controls:IsShown(), "controls hidden for a raider")
+
+            env.units.player.rank = 2
+            addon.HUD:Refresh()
+            truthy(addon.HUD.controls:IsShown(), "controls shown for the leader")
+        end)
+    end)
+
+    it("names the instance and encounter in the title bar", function()
+        scenario(opts, function(addon)
+            addon.State:StartTest("hyjal_azgalor")
+            addon.HUD:Refresh()
+            local title = addon.HUD.frame.title:GetText()
+            truthy(title:find("MOUNT HYJAL", 1, true), "instance named")
+            truthy(title:find("AZGALOR", 1, true), "encounter named")
+        end)
+    end)
+
+    it("redraws itself when state changes without being asked", function()
+        scenario(opts, function(addon)
+            addon.State:StartTest("hyjal_kazrogal")
+            -- No explicit Refresh: the signal bus should have driven it.
+            eq(addon.HUD.nowTitle:GetText(), "Wave 1", "rendered from the signal")
+            addon.State:GoToStep(9, "local")
+            eq(addon.HUD.nowTitle:GetText(), "Kaz'rogal", "followed the change")
+        end)
+    end)
+end
+
+local function suiteCommands(profile, opts)
+    group("Commands [" .. profile .. "]")
+
+    it("registers the slash command", function()
+        scenario(opts, function(addon)
+            eq(_G.SLASH_POPPERPIGRAIDCALL1, "/pprc", "slash token")
+            truthy(type(_G.SlashCmdList["POPPERPIGRAIDCALL"]) == "function", "handler installed")
+        end)
+    end)
+
+    it("starts an encounter from /pprc test", function()
+        scenario(opts, function(addon)
+            addon.Commands:Run("test hyjal_kazrogal")
+            eq(addon.State.encounterID, "hyjal_kazrogal", "encounter loaded")
+            truthy(addon.State.testMode, "test mode on")
+            truthy(addon.HUD.frame:IsShown(), "HUD shown")
+        end)
+    end)
+
+    it("lists encounters when /pprc test is given no argument", function()
+        scenario(opts, function(addon, env)
+            addon.Commands:Run("test")
+            local blob = table.concat(env.printed, "\n")
+            truthy(blob:find("hyjal_winterchill", 1, true), "lists a known encounter")
+            isNil(addon.State.encounterID, "did not start anything")
+        end)
+    end)
+
+    it("rejects an unknown encounter without changing state", function()
+        scenario(opts, function(addon, env)
+            addon.Commands:Run("test hyjal_winterchill")
+            addon.Commands:Run("test not_a_boss")
+            local blob = table.concat(env.printed, "\n")
+            truthy(blob:find("no such encounter", 1, true), "explains the failure")
+            eq(addon.State.encounterID, "hyjal_winterchill", "state untouched")
+        end)
+    end)
+
+    it("advances and rewinds from chat", function()
+        scenario(opts, function(addon)
+            addon.Commands:Run("test hyjal_winterchill")
+            addon.Commands:Run("next")
+            addon.Commands:Run("next")
+            eq(addon.State:Current().id, "wave3", "advanced twice")
+            addon.Commands:Run("back")
+            eq(addon.State:Current().id, "wave2", "rewound once")
+        end)
+    end)
+
+    it("reports an unknown command instead of erroring", function()
+        scenario(opts, function(addon, env)
+            addon.Commands:Run("frobnicate")
+            truthy(table.concat(env.printed, "\n"):find("unknown command", 1, true), "explained")
+        end)
+    end)
+
+    it("prints the capability table and the unverified count on /pprc debug", function()
+        scenario(opts, function(addon, env)
+            addon.Commands:Run("test hyjal_winterchill")
+            addon.Commands:Run("debug")
+            local blob = table.concat(env.printed, "\n")
+            truthy(blob:find("world state", 1, true), "capability table printed")
+            truthy(blob:find("unverified", 1, true), "unverified data count printed")
+            truthy(addon.debugEnabled, "debug toggled on")
+        end)
+    end)
+
+    it("survives a handler that throws", function()
+        scenario(opts, function(addon, env)
+            addon.Commands.handlers["boom"] = function() error("kaboom") end
+            addon.Commands:Run("boom")
+            truthy(table.concat(env.printed, "\n"):find("command failed", 1, true), "reported, not thrown")
+        end)
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -372,6 +696,9 @@ io.write(string.rep("-", 60), "\n")
 for _, profile in ipairs(PROFILES) do
     suiteAdapter(profile.name, profile.opts)
     suiteCore(profile.name, profile.opts)
+    suiteState(profile.name, profile.opts)
+    suiteHUD(profile.name, profile.opts)
+    suiteCommands(profile.name, profile.opts)
 end
 
 io.write(string.rep("-", 60), "\n")

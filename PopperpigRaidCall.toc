@@ -16,3 +16,17 @@
 # Adapter must load second: every module below it probes capabilities through it.
 Core\Init.lua
 Core\Adapter.lua
+Core\StateMachine.lua
+
+# --- Data ---------------------------------------------------------------
+# Pure tables, zero logic. NPC IDs and wave compositions live ONLY here, so a
+# patch fix is a data edit that can ship the same night.
+Data\Hyjal.lua
+
+# --- UI -----------------------------------------------------------------
+# All plain CreateFrame("Frame"). No secure templates, so none of this can taint.
+UI\Widgets.lua
+UI\HUD.lua
+
+# --- Commands last: it wires every module above into /pprc ---------------
+Core\Commands.lua
