@@ -95,6 +95,8 @@ function frameMethods:GetWidth() return self._width end
 function frameMethods:GetHeight() return self._height end
 function frameMethods:GetStringWidth() return #tostring(self._text or "") * 6 end
 function frameMethods:SetAlpha(a) self._alpha = a end
+function frameMethods:SetFocus() self._focused = true end
+function frameMethods:ClearFocus() self._focused = false end
 function frameMethods:GetAlpha() return self._alpha == nil and 1 or self._alpha end
 
 function frameMethods:SetPoint(point, rel, relPoint, x, y)

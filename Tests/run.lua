@@ -2118,6 +2118,188 @@ local function suiteBriefing(profile, opts)
     end)
 end
 
+local function suiteBlackTemple(profile, opts)
+    group("Black Temple [" .. profile .. "]")
+
+    it("registers all nine encounters", function()
+        scenario(opts, function(addon)
+            local bt = addon.Instances.blacktemple
+            truthy(bt, "instance registered")
+            eq(bt.mapID, 564, "map id")
+            eq(#bt.order, 9, "nine encounters")
+
+            for _, encounterID in ipairs(bt.order) do
+                local encounter = addon:GetEncounter(encounterID)
+                truthy(encounter, encounterID .. " present")
+                truthy(#encounter.steps > 0, encounterID .. " has steps")
+            end
+        end)
+    end)
+
+    it("keys every boss for combat-log surfacing", function()
+        scenario(opts, function(addon)
+            local bt = addon.Instances.blacktemple
+            eq(bt.byNPC[22887].encounter, "bt_najentus", "Naj'entus")
+            eq(bt.byNPC[22871].encounter, "bt_teron", "Teron")
+            eq(bt.byNPC[22917].encounter, "bt_illidan", "Illidan")
+            -- The council share one health pool but four bodies; all four key
+            -- to the same encounter.
+            for _, npcID in ipairs({ 22949, 22950, 22951, 22952 }) do
+                eq(bt.byNPC[npcID].encounter, "bt_council", "council member " .. npcID)
+            end
+        end)
+    end)
+
+    it("keys the three Reliquary essences to their own phases", function()
+        scenario(opts, function(addon)
+            local bt = addon.Instances.blacktemple
+            local suffering = bt.byNPC[23418]
+            local desire    = bt.byNPC[23419]
+            local anger     = bt.byNPC[23420]
+
+            eq(suffering.encounter, "bt_reliquary", "suffering")
+            eq(desire.encounter, "bt_reliquary", "desire")
+            eq(anger.encounter, "bt_reliquary", "anger")
+            truthy(desire.step ~= suffering.step, "each essence lands on its own step")
+        end)
+    end)
+
+    it("drives Illidan's phases off health thresholds", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("bt_illidan")
+            local illidan = addon:GetEncounter("bt_illidan")
+
+            local phase2, phase4
+            for _, step in ipairs(illidan.steps) do
+                if step.id == "phase2" then phase2 = step end
+                if step.id == "phase4" then phase4 = step end
+            end
+            eq(phase2.advance, "health_pct", "phase 2 is health driven")
+            eq(phase2.healthPct, 65, "at 65%")
+            eq(phase4.healthPct, 30, "phase 4 at 30%")
+
+            -- And it actually advances.
+            env.units.target = { name = "Illidan Stormrage", guid = "Creature-0-1-564-0-22917-1",
+                hp = 60, hpMax = 100 }
+            addon.Detect:PollHealth()
+            eq(addon.State:Current().id, "phase2", "crossed 65% into phase 2")
+        end)
+    end)
+
+    it("marks all of its data unverified", function()
+        scenario(opts, function(addon)
+            local bt = addon.Instances.blacktemple
+            eq(bt.unverified, bt.total, "nothing claims to be confirmed yet")
+        end)
+    end)
+
+    it("leaves a trash pack unkeyed rather than guessing its NPC id", function()
+        scenario(opts, function(addon)
+            local packs = addon.TrashPacks.blacktemple
+            truthy(#packs > 0, "packs defined")
+
+            local byID = {}
+            for _, pack in ipairs(packs) do byID[pack.id] = pack end
+
+            truthy(#byID.promenade.npcIDs > 0, "the pack we know is keyed")
+            eq(#byID.channelers.npcIDs, 0, "the one we do not know is left unkeyed, not guessed")
+            truthy(byID.channelers.call, "but it still carries the call to make")
+        end)
+    end)
+
+    it("carries manual checklists for the gear-check fights", function()
+        scenario(opts, function(addon)
+            local shahraz = addon:GetEncounter("bt_shahraz")
+            truthy(shahraz.checklist, "Shahraz has one")
+            truthy(table.concat(shahraz.checklist, " "):find("resistance", 1, true),
+                "and it is about resist gear, which cannot be read from the API")
+
+            local illidan = addon:GetEncounter("bt_illidan")
+            truthy(illidan.checklist, "Illidan has one")
+        end)
+    end)
+
+    it("walks every Black Temple encounter end to end", function()
+        scenario(opts, function(addon)
+            for _, encounterID in ipairs(addon.Instances.blacktemple.order) do
+                truthy(addon.State:StartTest(encounterID), "started " .. encounterID)
+                local total = addon.State:StepCount()
+                for _ = 2, total do addon.State:Advance("local") end
+                eq(addon.State.stepIndex, total, encounterID .. " walked to its last step")
+                truthy(addon.State:Current().call, encounterID .. " last step has words to say")
+            end
+        end)
+    end)
+end
+
+local function suiteOptions(profile, opts)
+    group("Options [" .. profile .. "]")
+
+    it("round-trips a profile string", function()
+        scenario(opts, function(addon)
+            addon.db.localEcho = true
+            addon.db.hudScale = 1.25
+            addon.db.assignments = { corner_a = "Vexmoor", corner_b = "Aeliswyn" }
+            addon.db.checklist = { ["bt_teron:1"] = true }
+
+            local exported = addon.Options:Export()
+            truthy(exported:find("^PPRC1:"), "prefixed so it can be recognised")
+
+            -- Wipe, then restore from the string.
+            addon.db.localEcho = false
+            addon.db.assignments = {}
+            addon.db.checklist = {}
+
+            local ok, message = addon.Options:Import(exported)
+            truthy(ok, "imported: " .. tostring(message))
+            eq(addon.db.localEcho, true, "setting restored")
+            eq(addon.db.hudScale, 1.25, "scale restored")
+            eq(addon.db.assignments.corner_a, "Vexmoor", "assignment restored")
+            truthy(addon.db.checklist["bt_teron:1"], "checklist tick restored")
+        end)
+    end)
+
+    it("does not export personal frame positions", function()
+        scenario(opts, function(addon)
+            addon.db.frames = { hud = { point = "TOPLEFT", x = 5, y = -5 } }
+            falsy(addon.Options:Export():find("TOPLEFT", 1, true),
+                "someone else's screen layout is not ours to push")
+        end)
+    end)
+
+    it("refuses a string that is not one of ours", function()
+        scenario(opts, function(addon)
+            local ok, message = addon.Options:Import("just some text a raider pasted")
+            falsy(ok, "refused")
+            truthy(message:find("does not look like", 1, true), "and explained why")
+
+            local ok2, message2 = addon.Options:Import("PPRC1:")
+            falsy(ok2, "empty payload refused too")
+            truthy(message2, "with a reason")
+        end)
+    end)
+
+    it("leaves existing settings alone when the import fails", function()
+        scenario(opts, function(addon)
+            addon.db.assignments = { corner_a = "Vexmoor" }
+            addon.Options:Import("garbage")
+            eq(addon.db.assignments.corner_a, "Vexmoor", "nothing was clobbered")
+        end)
+    end)
+
+    it("reflects live settings in its checkboxes", function()
+        scenario(opts, function(addon)
+            addon.db.localEcho = true
+            addon.Options:Show()
+            truthy(addon.Options.boxes.localEcho:GetChecked(), "checkbox follows the db")
+
+            local box = addon.Options.boxes.localEcho
+            box:GetScript("OnClick")(box)
+            eq(addon.db.localEcho, false, "and toggling it writes back")
+        end)
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -2143,6 +2325,8 @@ for _, profile in ipairs(PROFILES) do
     suitePosMap(profile.name, profile.opts)
     suiteRosterUI(profile.name, profile.opts)
     suiteBriefing(profile.name, profile.opts)
+    suiteBlackTemple(profile.name, profile.opts)
+    suiteOptions(profile.name, profile.opts)
     suiteRateLimit(profile.name, profile.opts)
     suiteCallBoard(profile.name, profile.opts)
     suiteCommands(profile.name, profile.opts)

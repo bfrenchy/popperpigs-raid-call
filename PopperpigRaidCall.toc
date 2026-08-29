@@ -27,6 +27,7 @@ Data\Consumables.lua
 Data\Calls.lua
 Data\Positions.lua
 Data\Hyjal.lua
+Data\BlackTemple.lua
 
 # --- Core that consumes Data --------------------------------------------
 Core\Detect.lua
@@ -42,6 +43,7 @@ UI\CallBoard.lua
 UI\Readiness.lua
 UI\Roster.lua
 UI\Briefing.lua
+UI\Options.lua
 
 # --- Commands last: it wires every module above into /pprc ---------------
 Core\Commands.lua

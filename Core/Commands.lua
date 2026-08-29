@@ -78,6 +78,10 @@ register("brief", "/pprc brief", "Show or hide the pre-pull briefing for the cur
     if PPRC.Briefing then PPRC.Briefing:Toggle() end
 end)
 
+register("config", "/pprc config", "Open the settings panel.", function()
+    if PPRC.Options then PPRC.Options:Toggle() end
+end)
+
 register("lock", "/pprc lock", "Lock or unlock frame dragging.", function()
     PPRC.db.locked = not PPRC.db.locked
     PPRC:Print("frames are now %s", PPRC.db.locked and "|cffc1544alocked|r" or "|cff3fae6funlocked|r")
