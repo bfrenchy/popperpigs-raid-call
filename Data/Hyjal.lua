@@ -104,10 +104,10 @@ PPRC:RegisterInstance({
                 warn = { "TRINKET ICEBOLT", "MOVE OUT OF D&D", "SPREAD" },
                 verified = false,
                 brief = {
-                    { spell = "Icebolt",        text = "4s stun on a random target plus heavy frost damage. Trinket or pot the moment it lands." },
-                    { spell = "Death and Decay", text = "Ground effect, percentage of max HP per second. Move out immediately, do not heal through it." },
-                    { spell = "Frost Nova",     text = "20 yard root, up to 10 seconds. The killer combo is Nova into D&D -- keep a trinket for it." },
-                    { spell = "Frost Armor",    text = "Slows melee attack speed. Nothing to do, just expect slower threat." },
+                    { spell = "Icebolt",         text = "Heavy frost damage on a random target plus a damage-over-time effect, and they are stunned for its duration. Trinket or pot the moment it lands." },
+                    { spell = "Death and Decay", text = "A 20 yard patch on the ground dealing 15% of max health per second. Move out immediately -- this cannot be healed through." },
+                    { spell = "Frost Nova",      text = "Roots everyone close to him for up to 10 seconds. The killer combo is Nova into Death and Decay, so keep a trinket or a freedom for it." },
+                    { spell = "Frost Armor",     text = "Buffs him with +3000 armor and +75 frost resistance, and slows melee attackers by 25% attack speed and 50% movement while it holds. Expect a real DPS dip, not just slower threat." },
                 },
             },
         },
@@ -246,16 +246,20 @@ PPRC:RegisterInstance({
                 warn = { "LAST WAVE", "DRINK TO FULL" }, verified = false,
             },
             {
+                -- The detonation triggers on INSUFFICIENT mana, not on being
+                -- drained. Keeping mana high is what keeps you alive, and an
+                -- earlier version of this file said the exact opposite.
                 id = "boss", label = "Kaz'rogal", detail = "Mark of Kaz'rogal - War Stomp - Cripple",
-                call = "Mark drains mana and explodes when you hit zero. Mana users spend down BEFORE the pull and stay spread -- the explosion chains.",
+                call = "Mark drains your mana and you EXPLODE if it runs you dry. Keep mana up, pot and rune through it. If you are about to bottom out, run out of the raid first.",
                 advance = "npc_id", npcID = 17888, posmap = "kazrogal",
-                warn = { "SPEND YOUR MANA", "SPREAD - MARK EXPLODES", "STOMP INCOMING" },
+                warn = { "KEEP MANA UP", "POT / RUNE NOW", "RUN OUT IF LOW", "SPREAD" },
                 verified = false,
                 brief = {
-                    { spell = "Mark of Kaz'rogal", text = "Drains mana. At zero mana it explodes for heavy damage to everyone nearby. Spread out, and burn mana down deliberately before the pull." },
+                    { spell = "Mark of Kaz'rogal", text = "Drains 600 mana per second for 5 seconds. If it empties you, the debuff detonates for roughly 10-11k shadow damage to everyone near you. High mana is what saves you -- do NOT dump mana before the pull." },
+                    { spell = "Staying above it",  text = "Super Mana Potions, Demonic Runes and Dark Runes on cooldown. Hunters swap to Aspect of the Viper while marked. Druids can shift to Cat Form and negate the drain outright." },
+                    { spell = "If you will pop",   text = "Say so and run clear of the raid before it lands. One person detonating alone is survivable; detonating in the stack is not." },
+                    { spell = "Getting faster",    text = "The mark comes more often as the fight goes on, so mana pressure compounds. This is a race, not an endurance fight." },
                     { spell = "War Stomp",         text = "Raid-wide stun. Nothing to avoid, but healers should expect a gap in healing right after it." },
-                    { spell = "Cripple",           text = "Slows attack and movement on melee. Expect lower melee output; not dispellable by most." },
-                    { spell = "Malevolent Cleave", text = "Heavy frontal cleave. Melee stay behind him at all times." },
                 },
             },
         },

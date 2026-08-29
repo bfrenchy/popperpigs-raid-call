@@ -93,9 +93,18 @@ into a folder named exactly `PopperpigRaidCall`.
 
 **Everything in `Data/` currently ships as `verified = false`.** The wave compositions,
 NPC ids and spell details were authored from knowledge, not read off a live 2.5.6 client.
-They are the best available information and the HUD renders them normally — but nothing
-here claims to be confirmed, because the addon's own rule is that it never presents a
-guess as data.
+They are the best available information and the HUD renders them normally — with an
+`unverified` tag in the corner, so nothing on screen is mistaken for settled fact.
+
+Boss mechanics have since been through a research pass that found real errors, including a
+Kaz'rogal call that was exactly backwards and would have wiped raids. Those are corrected.
+But that pass ran on search-engine summaries rather than primary sources — see
+[SPIKES.md](SPIKES.md) for the provenance and its limits. Confirmed in game still beats
+confirmed by search.
+
+**Wave-by-wave compositions are the weakest area and are still open.** The mob roster is
+known to be incomplete: Crypt Fiends, Deathknights, Shades, Felguards and Infernals all
+appear in the waves and are absent from the data.
 
 Black Temple trash ids are the least confident of all. Packs whose id could not be stood
 behind carry **no** npcIDs rather than a plausible-looking guess: an unkeyed pack means

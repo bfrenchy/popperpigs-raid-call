@@ -46,15 +46,18 @@ PPRC:RegisterInstance({
                 advance = "manual", warn = { "SINGLE PULL", "INTERRUPT CASTERS" }, verified = false,
             },
             {
+                -- Two different people: the impaled one is stunned and cannot
+                -- act, and whoever CLICKS them gets the throwable spine.
                 id = "boss", label = "High Warlord Naj'entus", detail = "Impaling Spine - Needle Spine - Tidal Shield",
-                call = "When you get a spine, CLICK IT and throw it back at him. The shield does not break any other way.",
+                call = "If someone near you is impaled, CLICK THE SPINE to free them -- you keep the spine. Hold it for the shield, then throw it on my call.",
                 advance = "npc_id", npcID = 22887, posmap = "najentus",
-                warn = { "SPINE - CLICK IT", "THROW IT BACK", "SPREAD FOR NEEDLES" },
+                warn = { "FREE THE IMPALED", "HOLD THE SPINE", "THROW IT NOW", "SPREAD FOR NEEDLES" },
                 verified = false,
                 brief = {
-                    { spell = "Impaling Spine",  text = "Impales a player and roots them. Someone clicks the spine on the ground to free them." },
-                    { spell = "Tidal Shield",    text = "Absorbs all damage and ticks raid-wide. Only a thrown spine breaks it -- keep one ready." },
-                    { spell = "Needle Spine",    text = "Hits several nearby players. Stay spread so it cannot chain through the stack." },
+                    { spell = "Impaling Spine",  text = "Pins a player and stuns them -- they cannot free themselves. A nearby raider clicks the spine to release them, and THAT raider receives the usable spine." },
+                    { spell = "Tidal Shield",    text = "Cast roughly every 60 seconds, first one about a minute after the pull. It absorbs damage and ticks the raid. Only a thrown spine breaks it, so someone must be holding one before it goes up." },
+                    { spell = "Needle Spine",    text = "Hits several players near the target. Stay spread so it cannot chain through the stack." },
+                    { spell = "The rotation",    text = "Free impaled players immediately, healers top the raid, spine carrier stands ready, and the shield breaks on one clear call." },
                 },
             },
         },
@@ -279,51 +282,66 @@ PPRC:RegisterInstance({
         npcID = 22917,
         posmap = "illidan",
         checklist = {
-            "Flame tanks assigned and in position",
-            "Warlock tank ready for phase 4",
-            "Fire resistance where you have it",
+            "Flame tanks assigned, with fire resistance CAPPED",
+            "Warlock tank ready for demon form",
+            "Everyone knows their spread spot for Dark Barrage",
         },
+        -- PHASE STRUCTURE -- this is not a linear five-step fight.
+        --
+        -- P1 -> (65%) P2 flames -> P3 -> P4 -> P3 -> P4 ... on a TIMER, not on
+        -- health, until 30% -> P5. Only two steps here are health-gated; the
+        -- P3/P4 loop is manual because nothing in the API tells us where in
+        -- that alternation we are.
         steps = {
             {
                 id = "phase1", label = "Phase 1 - melee", detail = "Shear - Draw Soul - Parasitic Shadowfiend",
-                call = "Tank swap on Shear. Parasitic Shadowfiends spawn from players -- kill them fast, they spread.",
+                call = "Tank swap on Shear. Parasitic Shadowfiends spawn from players -- kill them fast, they spread on contact.",
                 advance = "npc_id", npcID = 22917, posmap = "illidan",
                 warn = { "TANK SWAP - SHEAR", "KILL THE FIENDS", "MOVE OUT OF DRAW SOUL" },
                 verified = false,
             },
             {
-                id = "phase2", label = "Phase 2 - flight and flames", detail = "Flames of Azzinoth at 65%",
-                call = "He is up. Flame tanks take one each and hold them APART. Everyone else spreads for Dark Barrage.",
+                id = "phase2", label = "Phase 2 - flight and flames", detail = "65% - two Flames of Azzinoth",
+                call = "He is airborne and untargetable. Flame tanks take one each and hold them APART. Everyone else spreads for Dark Barrage.",
                 advance = "health_pct", healthPct = 65, npcID = 22917, posmap = "illidan",
                 warn = { "FLAME TANKS GO", "KEEP THEM APART", "SPREAD FOR BARRAGE" },
                 verified = false,
             },
             {
-                id = "phase3", label = "Phase 3 - back down", detail = "Shadow Demons - Agonizing Flames",
-                call = "He is landing. Shadow Demons fixate -- ranged kill them before they reach anyone.",
+                id = "phase3", label = "Phase 3 - he lands", detail = "Night elf form - Agonizing Flames - about 40-55s",
+                call = "Both flames are down and he has landed. Normal tanking again -- this only lasts about a minute before he transforms.",
                 advance = "manual", posmap = "illidan",
-                warn = { "SHADOW DEMONS", "RANGED KILL THEM" },
+                warn = { "HE IS DOWN - GET ON HIM", "DEMON FORM SOON" },
                 verified = false,
             },
             {
-                id = "phase4", label = "Phase 4 - demon form", detail = "Demon Form at 30%",
-                call = "Demon form. Warlock tank takes him, everyone runs OUT of the aura and waits it out.",
+                id = "phase4", label = "Phase 4 - demon form", detail = "Aura of Dread - Shadow Demons - about 60s",
+                call = "Demon form. Warlock tank takes him, everyone else gets OUT of the aura. Shadow Demons fixate -- ranged kill them before they reach anyone.",
+                advance = "manual", posmap = "illidan",
+                warn = { "DEMON FORM", "WARLOCK TANK", "OUT OF THE AURA", "SHADOW DEMONS" },
+                verified = false,
+            },
+            {
+                id = "loop", label = "Phases 3 and 4 alternate", detail = "Back and forth on a timer until 30%",
+                call = "He keeps swapping between forms until 30 percent. Warlock tank and main tank trade him each time -- do not wait for a health call, watch the transform.",
+                advance = "manual", posmap = "illidan",
+                warn = { "SWAPPING - TANKS TRADE", "HOLD THE ROTATION" },
+                verified = false,
+            },
+            {
+                id = "phase5", label = "Phase 5 - Maiev", detail = "30% - Shadow Prison, then Maiev's traps",
+                call = "Thirty percent. Shadow Prison stuns the whole raid for about 30 seconds -- ride it out, then Maiev drops traps. Drag him into a trap and burn him while he is stunned.",
                 advance = "health_pct", healthPct = 30, npcID = 22917, posmap = "illidan",
-                warn = { "DEMON FORM", "WARLOCK TANK", "RUN OUT OF THE AURA" },
-                verified = false,
-            },
-            {
-                id = "phase5", label = "Phase 5 - the end", detail = "Enrage timer, burn it",
-                call = "Last phase. Everything you have left, right now. Bloodlust and burn.",
-                advance = "manual", posmap = "illidan",
-                warn = { "BLOODLUST NOW", "BURN IT" },
+                warn = { "SHADOW PRISON - RIDE IT", "DRAG HIM TO THE TRAP", "BLOODLUST ON THE TRAP" },
                 verified = false,
                 brief = {
                     { spell = "Shear",                text = "Removes the tank's shield or hits enormously. Tanks swap on it." },
                     { spell = "Parasitic Shadowfiend", text = "Spawns from a player and infects others on contact. Kill them immediately." },
-                    { spell = "Flames of Azzinoth",   text = "Two elementals at 65%. One tank each, held far apart -- if the flames meet, the raid dies." },
-                    { spell = "Shadow Demons",        text = "Fixate and stun whoever they reach. Ranged kill them on sight." },
-                    { spell = "Demon Form",           text = "At 30% he transforms. The warlock tank takes him and everyone else leaves the aura." },
+                    { spell = "Flames of Azzinoth",   text = "Two elementals at 65%, roughly 1.15 million health each, hitting for 8-10k fire. Flame tanks need fire resistance CAPPED, and the two must be held far apart." },
+                    { spell = "Phases 3 and 4",       text = "Once the flames die he alternates between night elf and demon form on a timer, roughly 40-60 seconds each, until 30%. It is not driven by his health -- watch the transform, not the health bar." },
+                    { spell = "Demon Form",           text = "Aura of Dread hits everyone within 15 yards, so only the warlock tank stays close. He also summons four Shadow Demons that lock onto players and stun them." },
+                    { spell = "Shadow Prison",        text = "Opens phase 5 at 30% by stunning the entire raid for about 30 seconds. Nothing to do but survive it -- healers pre-hot before it lands." },
+                    { spell = "Maiev's Shadow Trap",  text = "She lays traps in phase 5. Dragging Illidan into one stuns him and increases his damage taken for 15 seconds -- that is the burn window, so save cooldowns for it." },
                 },
             },
         },

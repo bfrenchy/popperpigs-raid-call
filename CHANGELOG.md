@@ -7,6 +7,43 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — read this one first
+
+- **Kaz'rogal: the mana call was backwards.** The call board said *"SPEND YOUR MANA"* and
+  the briefing told casters to spend down before the pull. Mark of Kaz'rogal detonates on
+  **insufficient** mana — so following that button would have detonated a raid's entire
+  caster core at once. It now says to keep mana up, pot and rune through it, and only run
+  clear if you are about to bottom out. It also carries the hunter (Aspect of the Viper)
+  and druid (Cat Form) outs. **If you ran an earlier build, tell your raid.**
+- **Illidan's phases were structurally wrong.** Demon form was gated at 30%; it is not
+  health-gated at all. Phases 3 and 4 alternate on a timer until 30%, and 30% starts phase
+  5 — Shadow Prison stunning the raid for ~30s, then Maiev's Shadow Traps, which are the
+  actual burn window. Shadow Demons moved to demon form where they belong, and the
+  checklist now asks for **capped** fire resistance on flame tanks rather than "where you
+  have it".
+- **Naj'entus: the spine call addressed the wrong person.** The impaled player is stunned
+  and cannot free themselves. A nearby raider clicks the spine, and *that* raider receives
+  the throwable one.
+- **Rage Winterchill specifics.** The 20-yard figure belongs to Death and Decay, not Frost
+  Nova; Frost Armor is +3000 armor, +75 frost resistance and a 25%/50% melee slow, not
+  just "slower threat".
+
+### Added
+
+- The HUD now shows an **unverified** tag on any step whose data has not been confirmed
+  against a live client, so a wave composition is never mistaken for settled fact.
+- Regression tests pinning the above: a tripwire that fails if the Kaz'rogal reversal ever
+  returns in any of its plausible phrasings, and an Illidan test asserting that exactly two
+  transitions are health-gated and demon form is not one of them.
+
+### Still unverified
+
+Wave-by-wave compositions across all 32 Hyjal waves remain unconfirmed and are pending a
+raid-leader source. The mob roster is known to be incomplete — Crypt Fiends, Deathknights,
+Shades, Felguards and Infernals all appear in the waves and are missing from the data.
+
+---
+
 First complete build: M0 through M7 of the technical plan.
 
 ### Added

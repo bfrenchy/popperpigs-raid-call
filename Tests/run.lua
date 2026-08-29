@@ -388,6 +388,52 @@ local function suiteState(profile, opts)
         end)
     end)
 
+    -- Mark of Kaz'rogal detonates on INSUFFICIENT mana, so low mana is what
+    -- kills you. This data once told the raid to spend their mana before the
+    -- pull, which would have detonated the entire caster core at once. These
+    -- two tests exist purely so that cannot come back.
+    it("tells the raid to keep mana up on Kaz'rogal, never to dump it", function()
+        scenario(opts, function(addon)
+            local kazrogal = addon:GetEncounter("hyjal_kazrogal")
+            local boss
+            for _, step in ipairs(kazrogal.steps) do
+                if step.id == "boss" then boss = step end
+            end
+
+            local text = boss.call .. " " .. table.concat(boss.warn, " ")
+            for _, entry in ipairs(boss.brief or {}) do text = text .. " " .. entry.text end
+            local lowered = text:lower()
+
+            truthy(lowered:find("keep mana up", 1, true) or lowered:find("high mana", 1, true),
+                "says to keep mana up")
+            truthy(lowered:find("explode", 1, true) or lowered:find("detonat", 1, true),
+                "explains the consequence")
+
+            -- The reversal, in the forms it could plausibly reappear in.
+            falsy(lowered:find("spend your mana", 1, true), "no 'spend your mana'")
+            falsy(lowered:find("spend down", 1, true), "no 'spend down'")
+            falsy(lowered:find("dump your mana", 1, true), "no 'dump your mana'")
+            falsy(lowered:find("burn mana down", 1, true), "no 'burn mana down'")
+        end)
+    end)
+
+    it("gives the hunter and druid outs, and the run-out instruction", function()
+        scenario(opts, function(addon)
+            local kazrogal = addon:GetEncounter("hyjal_kazrogal")
+            local boss
+            for _, step in ipairs(kazrogal.steps) do
+                if step.id == "boss" then boss = step end
+            end
+
+            local briefText = ""
+            for _, entry in ipairs(boss.brief or {}) do briefText = briefText .. " " .. entry.text end
+            truthy(briefText:find("Aspect of the Viper", 1, true), "hunter out")
+            truthy(briefText:find("Cat Form", 1, true), "druid out")
+            truthy(briefText:find("600 mana", 1, true), "states the drain rate")
+            truthy(boss.call:lower():find("run out", 1, true), "tells whoever will pop to leave the stack")
+        end)
+    end)
+
     it("counts unverified data so drift is visible", function()
         scenario(opts, function(addon)
             local hyjal = addon.Instances.hyjal
@@ -536,6 +582,27 @@ local function suiteHUD(profile, opts)
             eq(addon.HUD.nowDetail:GetText(), "Ghouls", "NOW detail")
             truthy(addon.HUD.nowCall:GetText():find("Ghouls only", 1, true), "spoken call rendered")
             truthy(addon.HUD.nextTitle:GetText():find("Wave 2", 1, true), "NEXT title")
+        end)
+    end)
+
+    it("marks a step whose data is not yet confirmed", function()
+        scenario(opts, function(addon)
+            -- Every Hyjal step currently ships unverified.
+            addon.State:StartTest("hyjal_winterchill")
+            addon.HUD:Refresh()
+            eq(addon.HUD.unverifiedTag:GetText(), "unverified", "flagged on unverified data")
+
+            -- And clears once a step is confirmed, so the tag means something.
+            addon.State:Current().verified = true
+            addon.HUD:Refresh()
+            eq(addon.HUD.unverifiedTag:GetText(), "", "no tag on confirmed data")
+        end)
+    end)
+
+    it("shows no unverified tag when there is no step at all", function()
+        scenario(opts, function(addon)
+            addon.HUD:Refresh()
+            eq(addon.HUD.unverifiedTag:GetText(), "", "nothing to flag")
         end)
     end)
 
@@ -2181,25 +2248,87 @@ local function suiteBlackTemple(profile, opts)
         end)
     end)
 
-    it("drives Illidan's phases off health thresholds", function()
-        scenario(opts, function(addon, env)
-            addon.State:StartTest("bt_illidan")
+    -- Illidan's phases are NOT a linear health ladder. Only two transitions are
+    -- health-gated; phases 3 and 4 alternate on a timer until 30%. An earlier
+    -- version of this data gated demon form at 30%, which is where phase 5
+    -- actually starts, so this test pins the real shape.
+    it("health-gates only the two transitions that really are health-gated", function()
+        scenario(opts, function(addon)
             local illidan = addon:GetEncounter("bt_illidan")
 
-            local phase2, phase4
+            local byID, gated = {}, {}
             for _, step in ipairs(illidan.steps) do
-                if step.id == "phase2" then phase2 = step end
-                if step.id == "phase4" then phase4 = step end
+                byID[step.id] = step
+                if step.advance == "health_pct" then gated[#gated + 1] = step.id end
             end
-            eq(phase2.advance, "health_pct", "phase 2 is health driven")
-            eq(phase2.healthPct, 65, "at 65%")
-            eq(phase4.healthPct, 30, "phase 4 at 30%")
 
-            -- And it actually advances.
+            eq(#gated, 2, "exactly two health-gated steps, got: " .. table.concat(gated, ","))
+            eq(byID.phase2.healthPct, 65, "flames at 65%")
+            eq(byID.phase5.healthPct, 30, "Maiev phase at 30%")
+
+            -- The whole point: demon form is on a timer, not a health gate.
+            eq(byID.phase4.advance, "manual", "demon form is not health-gated")
+            isNil(byID.phase4.healthPct, "and carries no threshold at all")
+            eq(byID.phase3.advance, "manual", "the landing phase is not health-gated either")
+        end)
+    end)
+
+    it("advances into the flame phase when Illidan crosses 65%", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("bt_illidan")
             env.units.target = { name = "Illidan Stormrage", guid = "Creature-0-1-564-0-22917-1",
                 hp = 60, hpMax = 100 }
             addon.Detect:PollHealth()
             eq(addon.State:Current().id, "phase2", "crossed 65% into phase 2")
+        end)
+    end)
+
+    it("names Shadow Prison and Maiev's trap in the 30% phase", function()
+        scenario(opts, function(addon)
+            local illidan = addon:GetEncounter("bt_illidan")
+            local phase5
+            for _, step in ipairs(illidan.steps) do
+                if step.id == "phase5" then phase5 = step end
+            end
+
+            -- These are the only two things that matter at 30%; the previous
+            -- text said "Bloodlust and burn" and mentioned neither.
+            truthy(phase5.call:find("Shadow Prison", 1, true), "warns about the raid-wide stun")
+            truthy(phase5.call:lower():find("trap", 1, true), "tells them to use the trap")
+
+            local briefText = ""
+            for _, entry in ipairs(phase5.brief or {}) do
+                briefText = briefText .. " " .. (entry.spell or "") .. " " .. entry.text
+            end
+            truthy(briefText:find("Shadow Trap", 1, true), "brief covers the trap")
+            truthy(briefText:find("alternate", 1, true) or briefText:find("timer", 1, true),
+                "brief explains the phase alternation")
+        end)
+    end)
+
+    it("calls for capped fire resistance on the flame tanks", function()
+        scenario(opts, function(addon)
+            local illidan = addon:GetEncounter("bt_illidan")
+            local checklist = table.concat(illidan.checklist, " ")
+            truthy(checklist:find("CAPPED", 1, true), "capped, not 'where you have it': " .. checklist)
+        end)
+    end)
+
+    it("puts the spine in the hands of whoever frees the impaled player", function()
+        scenario(opts, function(addon)
+            local najentus = addon:GetEncounter("bt_najentus")
+            local boss
+            for _, step in ipairs(najentus.steps) do
+                if step.id == "boss" then boss = step end
+            end
+
+            -- The impaled player is stunned and cannot act. Telling them to
+            -- click is telling the one person who can't.
+            local briefText = ""
+            for _, entry in ipairs(boss.brief or {}) do briefText = briefText .. " " .. entry.text end
+            truthy(briefText:find("cannot free themselves", 1, true), "says the impaled player is helpless")
+            truthy(briefText:find("THAT raider", 1, true), "and that the rescuer gets the spine")
+            truthy(boss.call:find("free them", 1, true), "call addresses the rescuer")
         end)
     end)
 

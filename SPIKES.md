@@ -16,12 +16,49 @@ chain; `/pprc scan` prints the raw values.
 | # | Question | Status | Result |
 | --- | --- | --- | --- |
 | S1 | Does `UnitPosition` return coordinates for raid units inside an instance? | **not run** | Expected no. Nothing depends on it — the plan already assumes static diagrams, and `UI/PosMap.lua` draws from fixed coordinates. |
-| S2 | Does Hyjal's world state expose a wave *number*, or only enemies remaining? | **self-resolving** | Answers itself. `Core/Detect.lua` classifies each world-state number by behaviour over 3+ updates and reports the tier. |
+| S2 | Does Hyjal's world state expose a wave *number*, or only enemies remaining? | **self-resolving — evidence for tier 1** | Answers itself at runtime. Guides describe a wave counter that, after wave 8, is *replaced* by a display reading **"Invading Enemies = 1"** — which reads as a genuine wave counter (classifier tier 1) rather than an enemies-remaining count. Confirm in game; see the note below. |
 | S3 | Do `boss1`–`boss5` exist? Does `ENCOUNTER_START` fire? | **self-resolving** | Answers itself. `ENCOUNTER_START` is probed with `pcall` at load; boss tokens resolve lazily on the first real encounter. |
 | S4 | Can an addon call `SetRaidTarget()` with assist, in and out of combat? | **not run** | Fallback already shipped: `PosMap:ApplyMarks` reports failures and prints a macro to use instead. |
 | S5 | Is `C_ChatInfo.SendAddonMessage` present? Is `RAID` valid? | **self-resolving** | Probed at load. `/pprc debug` prints `C_ChatInfo`, `global`, or `none`. Legacy global is the coded fallback. |
 | S6 | `SendChatMessage` RAID_WARNING throttle ceiling | **not run** | The limiter ships regardless at 1 message / 1.5s. Only tighten it if a real disconnect is seen. |
 | S7 | How often is `UnitGroupRolesAssigned` actually `NONE` in a PUG? | **observational** | Handled by display, not detection: an unset role renders as `— unset —` and is never inferred from class. |
+
+---
+
+## Note on S2 — "Invading Enemies = 1"
+
+Multiple guides state that once the eighth wave dies, the wave counter disappears and is
+replaced by a display reading `Invading Enemies = 1`, roughly a minute before the boss
+reaches the base.
+
+Two consequences if that holds in 2.5.6:
+
+1. It is evidence the counter really does count **waves up**, not enemies down, which is
+   the classifier's tier 1 and the best case for `Core/Detect.lua`.
+2. The *disappearance* of the counter is itself a boss-incoming signal, about a minute of
+   warning. Nothing uses that yet. It would be a natural addition to the encounter
+   boundary chain — but only after `/pprc scan` confirms the world state actually behaves
+   this way, rather than on the strength of a guide.
+
+---
+
+## Provenance — how the current data was checked
+
+Read this before trusting anything below as settled.
+
+The correction pass in this repo was done **without access to primary sources**. The
+environment's egress proxy blocks wowhead, warcraft.wiki.gg, warcrafttavern, icy-veins and
+every comparable site, for both direct fetches and the agent's page reader. Everything was
+established from **search-engine summaries** of those pages.
+
+That is strong enough to prove something is wrong — it caught a reversed Kaz'rogal call
+and a structurally wrong Illidan phase model — and mostly strong enough to establish what
+is right. But it is second-hand, and on the wave structure two summaries flatly
+contradicted each other before a third settled it.
+
+So: the boss mechanics have been corrected and are believed accurate, but they carry
+`verified = false` for the same reason everything else does. **Confirmed in game beats
+confirmed by search.** Flip the flags only from a live clear.
 
 ---
 

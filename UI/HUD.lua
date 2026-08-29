@@ -66,6 +66,14 @@ function HUD:Build()
     self.nowDetail = W.Text(f, { color = "muted", font = "GameFontNormalSmall", width = 320 - PAD * 2 })
     self.nowDetail:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -68)
 
+    -- Steps whose data has not been confirmed against a live client say so
+    -- here, not just in /pprc debug. A raid leader reading a wave composition
+    -- off the HUD mid-pull deserves to know whether it is a confirmed fact or
+    -- our best guess, and the honest answer is currently "guess" for most of
+    -- Data/. Sits on the title bar so it costs no body space.
+    self.unverifiedTag = W.Text(f.titleBar, { color = "gold", font = "GameFontNormalSmall", justify = "RIGHT" })
+    self.unverifiedTag:SetPoint("RIGHT", f.titleBar, "RIGHT", -20, 0)
+
     -- The literal words to say, in the plan's gold. Read aloud verbatim.
     self.nowCall = W.Text(f, { color = "gold", font = "GameFontNormalSmall", width = 320 - PAD * 2 })
     self.nowCall:SetPoint("TOPLEFT", f, "TOPLEFT", PAD, -84)
@@ -157,6 +165,11 @@ function HUD:Refresh()
     end
 
     -- Body -------------------------------------------------------------------
+    -- verified == false means the composition or ids on this step were
+    -- authored rather than read off a live client. nil means the step never
+    -- made a factual claim worth flagging.
+    self.unverifiedTag:SetText((step and step.verified == false) and "unverified" or "")
+
     if not step then
         self.nowTitle:SetText("No encounter loaded")
         self.nowDetail:SetText(PPRC.Adapter:InGroup() and "Zone into Hyjal or Black Temple."
