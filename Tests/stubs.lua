@@ -114,6 +114,7 @@ end
 
 -- opts.modern       : C_Timer / C_ChatInfo / C_UnitAuras / C_WorldStateInfo present
 -- opts.worldState   : "none" | "global" | "namespace"
+-- opts.noAuras      : strip aura reading entirely, so "unknown" can be tested
 -- opts.missingEvents: set of event names whose registration throws
 function stubs.install(opts)
     opts = opts or {}
@@ -187,6 +188,7 @@ function stubs.install(opts)
     set("UnitIsConnected", function(token) local u = unit(token); return u == nil or u.connected ~= false end)
     set("UnitInRange", function(token) local u = unit(token); return u == nil or u.inRange ~= false end)
     set("UnitIsUnit", function(a, b) return unit(a) and unit(b) and unit(a) == unit(b) or false end)
+    set("UnitIsGhost", function(token) local u = unit(token); return u and u.ghost or false end)
     set("UnitGroupRolesAssigned", function(token) local u = unit(token); return u and u.role or "NONE" end)
     set("UnitIsGroupLeader", function(token) local u = unit(token); return u and u.rank == 2 or false end)
     set("UnitIsGroupAssistant", function(token) local u = unit(token); return u and u.rank == 1 or false end)
@@ -310,6 +312,13 @@ function stubs.install(opts)
         set("C_NamePlate", nil)
     end
 
+    -- A client that cannot read auras at all. The readiness board has to show
+    -- that as unknown rather than as everyone failing their flask check.
+    if opts.noAuras then
+        set("C_UnitAuras", nil)
+        set("UnitAura", nil)
+    end
+
     -- --- helpers ------------------------------------------------------------
 
     function env.fire(event, ...)
@@ -351,7 +360,8 @@ function stubs.install(opts)
                 name = m.name, class = m.class, className = m.className or m.class,
                 guid = m.guid or ("Player-0-000000" .. i),
                 hp = m.hp or 100, hpMax = m.hpMax or 100,
-                dead = m.dead or false, connected = m.connected, inRange = m.inRange,
+                dead = m.dead or false, ghost = m.ghost or false,
+                connected = m.connected, inRange = m.inRange,
                 role = m.role or "NONE", rank = m.rank or 0, auras = m.auras or {},
             }
             env.raidRoster[i] = { name = m.name, rank = m.rank or 0, class = m.class, className = m.className or m.class }

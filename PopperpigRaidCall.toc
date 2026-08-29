@@ -23,11 +23,13 @@ Core\StateMachine.lua
 # --- Data ---------------------------------------------------------------
 # Pure tables, zero logic. NPC IDs and wave compositions live ONLY here, so a
 # patch fix is a data edit that can ship the same night.
+Data\Consumables.lua
 Data\Calls.lua
 Data\Hyjal.lua
 
 # --- Core that consumes Data --------------------------------------------
 Core\Detect.lua
+Core\Roster.lua
 Core\Comm.lua
 
 # --- UI -----------------------------------------------------------------
@@ -35,6 +37,7 @@ Core\Comm.lua
 UI\Widgets.lua
 UI\HUD.lua
 UI\CallBoard.lua
+UI\Readiness.lua
 
 # --- Commands last: it wires every module above into /pprc ---------------
 Core\Commands.lua

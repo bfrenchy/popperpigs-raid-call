@@ -62,6 +62,14 @@ register("say", "/pprc say <text>", "Send one line through the throttle, as a ra
     PPRC.RateLimit:SendCall(text)
 end)
 
+register("ready", "/pprc ready", "Show or hide the readiness board.", function()
+    if PPRC.Readiness then PPRC.Readiness:Toggle() end
+end)
+
+register("check", "/pprc check", "Announce one readiness summary line to the raid.", function()
+    if PPRC.Roster then PPRC:Print(PPRC.Roster:SummaryLine()) end
+end)
+
 register("lock", "/pprc lock", "Lock or unlock frame dragging.", function()
     PPRC.db.locked = not PPRC.db.locked
     PPRC:Print("frames are now %s", PPRC.db.locked and "|cffc1544alocked|r" or "|cff3fae6funlocked|r")

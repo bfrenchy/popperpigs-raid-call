@@ -1522,6 +1522,260 @@ local function suiteComm(profile, opts)
     end)
 end
 
+local function suiteRoster(profile, opts)
+    group("Roster [" .. profile .. "]")
+
+    local FLASK = { name = "Flask of Relentless Assault", spellId = 28520 }
+    local FOOD  = { name = "Well Fed", spellId = 33257 }
+
+    local function standardRaid(env)
+        env.buildRaid({
+            { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true, auras = { FLASK, FOOD } },
+            { name = "Sollura",   class = "PALADIN", auras = { FLASK, FOOD }, inRange = false },
+            { name = "Aeliswyn",  class = "MAGE",    auras = {} },
+            { name = "Kethran",   class = "HUNTER",  auras = { FOOD } },
+            { name = "Brannoc",   class = "ROGUE",   auras = { FLASK } },
+            { name = "Vexmoor",   class = "WARLOCK", auras = { FOOD }, dead = true },
+        })
+    end
+
+    it("counts alive, in range, flask and food from the game", function()
+        scenario(opts, function(addon, env)
+            standardRaid(env)
+            local _, summary = addon.Roster:Scan()
+
+            eq(summary.total, 6, "roster size")
+            eq(summary.alive, 5, "one dead")
+            eq(summary.inRange, 5, "one out of range")
+            eq(summary.flask, 3, "three flasked")
+            eq(summary.food, 4, "four fed")
+        end)
+    end)
+
+    it("counts an elixir as consumed, since we cannot count how many", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", isPlayer = true,
+                  auras = { { name = "Elixir of Major Agility", spellId = 1 } } },
+            })
+            local players, summary = addon.Roster:Scan()
+            eq(players[1].flask, false, "no flask")
+            eq(players[1].elixir, true, "but an elixir")
+            eq(summary.flask, 1, "counted as consumed")
+        end)
+    end)
+
+    -- The heart of the plan's honesty rule.
+    it("reports unknown, not zero, when the client cannot read auras", function()
+        _G.PopperpigRaidCallDB = nil
+        _G.PopperpigRaidCall = nil
+        local env = stubs.install({ modern = opts.modern, worldState = opts.worldState, noAuras = true })
+        env.units.player = { name = "Popperpig", class = "WARRIOR", guid = "Player-0-1" }
+        local addon = loadAddon(env)
+
+        env.buildRaid({
+            { name = "Popperpig", class = "WARRIOR", isPlayer = true },
+            { name = "Sollura",   class = "PALADIN" },
+        })
+        local players, summary = addon.Roster:Scan()
+
+        isNil(players[1].flask, "flask unreadable, not false")
+        eq(summary.flask, 0, "nothing counted as having one")
+        eq(summary.flaskUnknown, 2, "both counted as unknown")
+
+        -- And nobody is accused of missing a flask on that basis.
+        eq(#addon.Roster:Offenders(), 0, "no offenders invented from a gap in our reading")
+        env.restore()
+    end)
+
+    it("lists offenders with only what is actually wrong", function()
+        scenario(opts, function(addon, env)
+            standardRaid(env)
+            addon.Roster:Scan()
+
+            local byName = {}
+            for _, entry in ipairs(addon.Roster:Offenders()) do
+                byName[entry.player.name] = table.concat(entry.issues, ",")
+            end
+
+            eq(byName["Aeliswyn"], "no flask,no food", "missing both")
+            eq(byName["Kethran"], "no flask", "missing only a flask")
+            eq(byName["Brannoc"], "no food", "missing only food")
+            isNil(byName["Popperpig"], "fully buffed player is not an offender")
+            truthy(byName["Sollura"]:find("out of range"), "range noted")
+        end)
+    end)
+
+    it("summarises in one line with counts and no names", function()
+        scenario(opts, function(addon, env)
+            standardRaid(env)
+            local line = addon.Roster:SummaryLine()
+
+            truthy(line:find("3 missing flask", 1, true), "flask count: " .. line)
+            truthy(line:find("2 missing food", 1, true), "food count")
+            falsy(line:find("Aeliswyn", 1, true), "no names in the announcement")
+            falsy(line:find("\n", 1, true), "one line")
+        end)
+    end)
+
+    it("says so plainly when everyone is ready", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", isPlayer = true, auras = { FLASK, FOOD } },
+                { name = "Sollura",   class = "PALADIN", auras = { FLASK, FOOD } },
+            })
+            truthy(addon.Roster:SummaryLine():find("all 2 ready", 1, true), "clean report")
+        end)
+    end)
+
+    it("whispers only about things a raider can fix standing there", function()
+        scenario(opts, function(addon, env)
+            standardRaid(env)
+            addon.Roster:Scan()
+            addon.Roster:WhisperOffenders()
+            drainAddon(env, addon)
+
+            local whispered = {}
+            for _, message in ipairs(env.chat) do
+                if message.channel == "WHISPER" then whispered[message.target] = message.msg end
+            end
+
+            truthy(whispered["Aeliswyn"], "told about consumables")
+            truthy(whispered["Kethran"], "told about a missing flask")
+            isNil(whispered["Sollura"], "not whispered merely for being out of range")
+            isNil(whispered["Vexmoor"], "not told they are dead, which they know")
+        end)
+    end)
+
+    it("splits a wipe into alive, released and still a corpse", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "A", class = "WARRIOR", isPlayer = true },
+                { name = "B", class = "MAGE",   dead = true, ghost = true },
+                { name = "C", class = "PRIEST", dead = true, ghost = true },
+                { name = "D", class = "ROGUE",  dead = true },
+            })
+            local status = addon.Roster:WipeScan()
+
+            eq(status.total, 4, "everyone counted")
+            eq(status.alive, 1, "one still up")
+            eq(status.released, 2, "two ghosts running back")
+            eq(status.corpse, 1, "one waiting on a res")
+        end)
+    end)
+end
+
+local function suiteReadiness(profile, opts)
+    group("Readiness [" .. profile .. "]")
+
+    local FLASK = { name = "Flask of Relentless Assault", spellId = 28520 }
+    local FOOD  = { name = "Well Fed", spellId = 33257 }
+
+    it("renders the summary tiles", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", isPlayer = true, auras = { FLASK, FOOD } },
+                { name = "Sollura",   class = "PALADIN", auras = { FLASK } },
+                { name = "Aeliswyn",  class = "MAGE",    auras = {} },
+            })
+            addon.Readiness:Show()
+
+            eq(addon.Readiness.tiles.alive.value:GetText(), "3/3", "alive tile")
+            eq(addon.Readiness.tiles.flask.value:GetText(), "2/3", "flask tile")
+            eq(addon.Readiness.tiles.food.value:GetText(), "1/3", "food tile")
+            truthy(addon.Readiness.readyCount:GetText():find("/ 3 READY", 1, true), "ready count")
+        end)
+    end)
+
+    it("shows a question mark, not a red zero, when auras are unreadable", function()
+        _G.PopperpigRaidCallDB = nil
+        _G.PopperpigRaidCall = nil
+        local env = stubs.install({ modern = opts.modern, worldState = opts.worldState, noAuras = true })
+        env.units.player = { name = "Popperpig", class = "WARRIOR", guid = "Player-0-1" }
+        local addon = loadAddon(env)
+
+        env.buildRaid({ { name = "Popperpig", class = "WARRIOR", isPlayer = true } })
+        addon.Readiness:Show()
+
+        eq(addon.Readiness.tiles.flask.value:GetText(), "?", "unknown, not 0/1")
+        truthy(addon.Readiness.footerNote:GetText():find("cannot read auras", 1, true), "and says why")
+        env.restore()
+    end)
+
+    it("lists offenders and says when there are none", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", isPlayer = true, auras = { FLASK, FOOD } },
+                { name = "Aeliswyn",  class = "MAGE",    auras = {} },
+            })
+            addon.Readiness:Show()
+            truthy(addon.Readiness.list.rows[1].left:GetText():find("Aeliswyn", 1, true), "offender listed")
+
+            env.units.raid2.auras = { FLASK, FOOD }
+            addon.Readiness:Refresh()
+            truthy(addon.Readiness.listHeading:GetText():find("everyone readable is ready", 1, true), "clean state")
+        end)
+    end)
+
+    it("renders the manual checklist from encounter data and remembers ticks", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", isPlayer = true } })
+            addon.State:StartTest("hyjal_archimonde")
+            addon.Readiness:Show()
+
+            local box = addon.Readiness.checkboxes[1]
+            truthy(box:IsShown(), "checklist shown for Archimonde")
+            truthy(box._key, "keyed to the encounter")
+
+            box:GetScript("OnClick")(box)
+            truthy(addon.db.checklist[box._key], "tick persisted")
+
+            -- Rebuild from the db, as a /reload would.
+            addon.Readiness:RefreshChecklist()
+            truthy(addon.Readiness.checkboxes[1]:GetChecked(), "tick restored")
+        end)
+    end)
+
+    it("hides the checklist on a step that has none", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", isPlayer = true } })
+            addon.State:StartTest("hyjal_winterchill")
+            addon.Readiness:Show()
+            falsy(addon.Readiness.checkboxes[1]:IsShown(), "nothing to tick")
+            truthy(addon.Readiness.checkHeading:GetText():find("no manual checks", 1, true), "says so")
+        end)
+    end)
+
+    it("switches to wipe recovery when the raid goes down", function()
+        scenario(opts, function(addon, env)
+            local members = {}
+            for i = 1, 10 do
+                members[i] = { name = "P" .. i, class = "MAGE", dead = i <= 8, ghost = i <= 5, isPlayer = i == 1 }
+            end
+            env.buildRaid(members)
+
+            env.fire("PLAYER_REGEN_ENABLED")
+            truthy(addon.Readiness.wipeMode, "entered wipe mode")
+            truthy(addon.Readiness.frame.title:GetText():find("WIPE RECOVERY", 1, true), "retitled")
+            eq(addon.Readiness.tiles.alive.value:GetText(), "2/10", "alive count")
+            eq(addon.Readiness.tiles.food.caption:GetText(), "RELEASED", "tiles repurposed")
+        end)
+    end)
+
+    it("leaves wipe mode on the next pull", function()
+        scenario(opts, function(addon, env)
+            local members = {}
+            for i = 1, 10 do members[i] = { name = "P" .. i, class = "MAGE", dead = i <= 8, isPlayer = i == 1 } end
+            env.buildRaid(members)
+
+            env.fire("PLAYER_REGEN_ENABLED")
+            truthy(addon.Readiness.wipeMode, "in wipe mode")
+            env.fire("PLAYER_REGEN_DISABLED")
+            falsy(addon.Readiness.wipeMode, "back to normal on the pull")
+        end)
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -1542,6 +1796,8 @@ for _, profile in ipairs(PROFILES) do
     suiteCodec(profile.name, profile.opts)
     suiteDetect(profile.name, profile.opts)
     suiteComm(profile.name, profile.opts)
+    suiteRoster(profile.name, profile.opts)
+    suiteReadiness(profile.name, profile.opts)
     suiteRateLimit(profile.name, profile.opts)
     suiteCallBoard(profile.name, profile.opts)
     suiteCommands(profile.name, profile.opts)

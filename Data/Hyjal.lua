@@ -344,6 +344,15 @@ PPRC:RegisterInstance({
         tanks = 1,
         npcID = 17968,
         waves = 0,
+        -- The API cannot read any of these, so they are checkboxes rather than
+        -- inferred ticks. A green tick in this addon always means the game
+        -- confirmed it, and none of this can be confirmed without inspection.
+        checklist = {
+            "Everyone has looted Tears of the Goddess",
+            "Tears is on an action bar, not in a bag",
+            "Tremor totems / fear ward assigned per group",
+            "Everyone spread to their starting spot",
+        },
         steps = {
             {
                 id = "prep", label = "Pre-pull -- Tears of the Goddess", detail = "Everyone loots Tears from the base NPC",
