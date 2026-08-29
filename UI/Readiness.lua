@@ -153,7 +153,6 @@ local function setTile(t, have, total, unknown, invert)
         local c = PPRC.COLORS.muted2
         t.value:SetTextColor(c[1], c[2], c[3])
         W.Recolor(t, "line")
-        t.caption:SetText(t.caption:GetText())
         return
     end
 
