@@ -1185,6 +1185,343 @@ local function suiteDetect(profile, opts)
     end)
 end
 
+-- Relay whatever the addon just put on the wire back into it, but attributed
+-- to somebody else. That exercises the real encode -> wire -> decode -> gate
+-- -> apply path; it is a loopback rather than two live clients, which the
+-- harness cannot host in one Lua state.
+local function relay(addon, env, fromName, index)
+    local sent = env.addonMessages[index or #env.addonMessages]
+    if not sent then return false end
+    env.fire("CHAT_MSG_ADDON", sent.prefix, sent.msg, sent.channel, fromName)
+    return true
+end
+
+local function drainAddon(env, addon)
+    for _ = 1, 60 do env.advance(0.1, addon) end
+end
+
+local function suiteCodec(profile, opts)
+    group("Codec [" .. profile .. "]")
+
+    it("round-trips strings, numbers, booleans and arrays", function()
+        scenario(opts, function(addon)
+            local Codec = addon.Codec
+            local original = {
+                e = "hyjal_winterchill", s = 6, ready = true, off = false,
+                names = { "Vexmoor", "Aeliswyn", "Kethran" },
+            }
+            local decoded = Codec.Decode(Codec.Encode(original))
+
+            eq(decoded.e, "hyjal_winterchill", "string")
+            eq(decoded.s, 6, "number stays a number")
+            eq(decoded.ready, true, "true")
+            eq(decoded.off, false, "false, not nil")
+            eq(#decoded.names, 3, "array length")
+            eq(decoded.names[2], "Aeliswyn", "array contents")
+        end)
+    end)
+
+    it("survives separators and realm names inside values", function()
+        scenario(opts, function(addon)
+            local Codec = addon.Codec
+            local original = { note = "a~b=c,d:e%f", who = "Sollura-Golemagg" }
+            local decoded = Codec.Decode(Codec.Encode(original))
+            eq(decoded.note, "a~b=c,d:e%f", "every separator escaped and restored")
+            eq(decoded.who, "Sollura-Golemagg", "realm-qualified name")
+        end)
+    end)
+
+    it("encodes deterministically so duplicates can be collapsed", function()
+        scenario(opts, function(addon)
+            local a = addon.Codec.Encode({ z = 1, a = 2, m = 3 })
+            local b = addon.Codec.Encode({ m = 3, a = 2, z = 1 })
+            eq(a, b, "same table, same bytes regardless of pairs() order")
+        end)
+    end)
+
+    it("sends a small payload as a single frame", function()
+        scenario(opts, function(addon)
+            local frames = addon.Codec.Frame("STATE", { e = "hyjal_winterchill", s = 6 })
+            eq(#frames, 1, "one frame")
+            truthy(#frames[1] <= 255, "inside the addon message cap")
+        end)
+    end)
+
+    -- The plan says chunking is not needed. For a 25-name roster it is.
+    it("chunks a 25-name assignment and reassembles it exactly", function()
+        scenario(opts, function(addon)
+            local names = {}
+            for i = 1, 25 do names[i] = "Raiderlongname" .. i end
+            local payload = { corner_a = names, corner_b = names }
+
+            local frames = addon.Codec.Frame("ASSIGN", payload)
+            truthy(#frames > 1, "actually needed more than one frame")
+            for _, frame in ipairs(frames) do
+                truthy(#frame <= 255, "each frame inside the cap")
+            end
+
+            local messageType, decoded
+            for _, frame in ipairs(frames) do
+                messageType, decoded = addon.Codec.Receive("Sollura", frame)
+            end
+            eq(messageType, "ASSIGN", "type preserved")
+            eq(#decoded.corner_a, 25, "all names arrived")
+            eq(decoded.corner_a[25], "Raiderlongname25", "last name intact")
+        end)
+    end)
+
+    it("returns nothing until every chunk has arrived", function()
+        scenario(opts, function(addon)
+            local names = {}
+            for i = 1, 25 do names[i] = "Raiderlongname" .. i end
+            local frames = addon.Codec.Frame("ASSIGN", { corner_a = names, corner_b = names })
+
+            local messageType = addon.Codec.Receive("Sollura", frames[1])
+            isNil(messageType, "incomplete payload yields nothing")
+            truthy(addon.Codec.PendingCount() > 0, "partial buffered")
+        end)
+    end)
+
+    it("does not interleave two senders chunking at the same time", function()
+        scenario(opts, function(addon)
+            local a, b = {}, {}
+            for i = 1, 25 do a[i] = "Alpha" .. i; b[i] = "Bravo" .. i end
+            local framesA = addon.Codec.Frame("ASSIGN", { x = a, y = a })
+            local framesB = addon.Codec.Frame("ASSIGN", { x = b, y = b })
+
+            -- Interleave them the way two people broadcasting at once would.
+            local decodedA, decodedB
+            for i = 1, math.max(#framesA, #framesB) do
+                if framesA[i] then
+                    local _, d = addon.Codec.Receive("Sollura", framesA[i])
+                    decodedA = d or decodedA
+                end
+                if framesB[i] then
+                    local _, d = addon.Codec.Receive("Kethran", framesB[i])
+                    decodedB = d or decodedB
+                end
+            end
+
+            eq(decodedA.x[1], "Alpha1", "sender A's payload intact")
+            eq(decodedB.x[1], "Bravo1", "sender B's payload intact")
+        end)
+    end)
+
+    it("drops a stale partial rather than leaking it forever", function()
+        scenario(opts, function(addon, env)
+            local names = {}
+            for i = 1, 25 do names[i] = "Raiderlongname" .. i end
+            local frames = addon.Codec.Frame("ASSIGN", { x = names, y = names })
+            addon.Codec.Receive("Sollura", frames[1])
+            truthy(addon.Codec.PendingCount() > 0, "buffered")
+
+            env.now = env.now + 120
+            addon.Codec.PurgeStale()
+            eq(addon.Codec.PendingCount(), 0, "purged")
+        end)
+    end)
+end
+
+local function suiteComm(profile, opts)
+    group("Comm [" .. profile .. "]")
+
+    local function raidWithLeader(env)
+        env.buildRaid({
+            { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true },
+            { name = "Sollura",   class = "PALADIN", rank = 2 },
+            { name = "Kethran",   class = "HUNTER",  rank = 0 },
+        })
+    end
+
+    it("broadcasts a local state change and follows a remote one", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true },
+                { name = "Sollura",   class = "PALADIN", rank = 2 },
+            })
+            addon.State:SetEncounter("hyjal_winterchill", "local")
+            addon.State:GoToStep(4, "local")
+            drainAddon(env, addon)
+
+            truthy(#env.addonMessages > 0, "something went on the wire")
+
+            -- Come back as the other leader, and confirm we apply it.
+            addon.State:GoToStep(1, "local")
+            relay(addon, env, "Sollura", 2)
+            eq(addon.State.stepIndex, 4, "followed the remote state")
+        end)
+    end)
+
+    it("discards a forged payload from someone without rank", function()
+        scenario(opts, function(addon, env)
+            raidWithLeader(env)
+            addon.State:SetEncounter("hyjal_winterchill", "remote")
+
+            -- Build a legitimate-looking STATE frame and send it as Kethran,
+            -- who holds no rank at all.
+            local frame = addon.Codec.Frame("STATE", { e = "hyjal_azgalor", s = 9 })[1]
+            env.fire("CHAT_MSG_ADDON", "PPRC", frame, "RAID", "Kethran")
+
+            eq(addon.State.encounterID, "hyjal_winterchill", "state untouched")
+            truthy(table.concat(addon.logBuffer, "\n"):find("discarded", 1, true), "and said why")
+        end)
+    end)
+
+    it("accepts the same payload once that player has assist", function()
+        scenario(opts, function(addon, env)
+            raidWithLeader(env)
+            addon.State:SetEncounter("hyjal_winterchill", "remote")
+
+            env.raidRoster[3].rank = 1   -- Kethran is given assist
+            local frame = addon.Codec.Frame("STATE", { e = "hyjal_azgalor", s = 9 })[1]
+            env.fire("CHAT_MSG_ADDON", "PPRC", frame, "RAID", "Kethran")
+
+            eq(addon.State.encounterID, "hyjal_azgalor", "now accepted")
+        end)
+    end)
+
+    it("ignores its own broadcast coming back", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            addon.State:SetEncounter("hyjal_winterchill", "local")
+            drainAddon(env, addon)
+
+            local fires = 0
+            addon:Listen("STATE_CHANGED", function() fires = fires + 1 end)
+            relay(addon, env, "Popperpig")
+            eq(fires, 0, "own message ignored, no ping-pong")
+        end)
+    end)
+
+    it("does not rebroadcast a change it was just told about", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 1, isPlayer = true },
+                { name = "Sollura",   class = "PALADIN", rank = 2 },
+            })
+            addon.State:SetEncounter("hyjal_winterchill", "remote")
+            drainAddon(env, addon)
+            local before = #env.addonMessages
+
+            addon.State:GoToStep(5, "remote")
+            drainAddon(env, addon)
+            eq(#env.addonMessages, before, "a remote change put nothing on the wire")
+        end)
+    end)
+
+    it("answers a state request, and only once for a burst of them", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true },
+                { name = "Sollura",   class = "PALADIN", rank = 0 },
+            })
+            addon.State:SetEncounter("hyjal_kazrogal", "local")
+            drainAddon(env, addon)
+            local before = #env.addonMessages
+
+            local request = addon.Codec.Frame("REQ_STATE", {})[1]
+            for _ = 1, 10 do
+                env.fire("CHAT_MSG_ADDON", "PPRC", request, "RAID", "Sollura")
+            end
+            drainAddon(env, addon)
+
+            local replies = #env.addonMessages - before
+            truthy(replies >= 1, "answered")
+            truthy(replies <= 2, "ten requests did not produce ten replies (got " .. replies .. ")")
+        end)
+    end)
+
+    it("restores a reloaded client from the controller's reply", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true },
+                { name = "Sollura",   class = "PALADIN", rank = 2 },
+            })
+            -- Fresh client: nothing loaded, as after a /reload mid-fight.
+            isNil(addon.State.encounterID, "starts blank")
+
+            local reply = addon.Codec.Frame("STATE", { e = "hyjal_azgalor", s = 7 })[1]
+            env.fire("CHAT_MSG_ADDON", "PPRC", reply, "RAID", "Sollura")
+
+            eq(addon.State.encounterID, "hyjal_azgalor", "caught up")
+            eq(addon.State.stepIndex, 7, "on the right step")
+            truthy(addon.Comm:HasController(), "knows who is driving")
+        end)
+    end)
+
+    it("reports no controller once the leader goes quiet", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true },
+                { name = "Sollura",   class = "PALADIN", rank = 2 },
+            })
+            local frame = addon.Codec.Frame("STATE", { e = "hyjal_azgalor", s = 2 })[1]
+            env.fire("CHAT_MSG_ADDON", "PPRC", frame, "RAID", "Sollura")
+            truthy(addon.Comm:HasController(), "live right after a broadcast")
+
+            env.now = env.now + 300
+            falsy(addon.Comm:HasController(), "gone quiet")
+        end)
+    end)
+
+    it("applies pushed assignments only from someone with rank", function()
+        scenario(opts, function(addon, env)
+            raidWithLeader(env)
+
+            local payload = { corner_a = { "Vexmoor" }, corner_b = { "Aeliswyn" } }
+            local frame = addon.Codec.Frame("ASSIGN", payload)[1]
+
+            env.fire("CHAT_MSG_ADDON", "PPRC", frame, "RAID", "Kethran")
+            isNil(addon.db.assignments.corner_a, "rejected from a plain raider")
+
+            env.fire("CHAT_MSG_ADDON", "PPRC", frame, "RAID", "Sollura")
+            eq(addon.db.assignments.corner_a[1], "Vexmoor", "accepted from the leader")
+        end)
+    end)
+
+    it("tallies versions for the sync report", function()
+        scenario(opts, function(addon, env)
+            raidWithLeader(env)
+            addon.version = "v1.2.0"
+
+            local old = addon.Codec.Frame("VERSION", { v = "v1.0.0" })[1]
+            local same = addon.Codec.Frame("VERSION", { v = "v1.2.0" })[1]
+            env.fire("CHAT_MSG_ADDON", "PPRC", old, "RAID", "Sollura")
+            env.fire("CHAT_MSG_ADDON", "PPRC", same, "RAID", "Kethran")
+
+            local report = addon.Comm:VersionReport()
+            truthy(report:find("3/3", 1, true), "counts who is running it: " .. report)
+            truthy(report:find("1 outdated", 1, true), "flags the old one")
+        end)
+    end)
+
+    it("sends nothing at all in test mode", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            addon.State:StartTest("hyjal_winterchill")
+            addon.State:Advance("local")
+            drainAddon(env, addon)
+            eq(#env.addonMessages, 0, "test mode never touches the raid")
+        end)
+    end)
+
+    it("degrades to a working addon when the client has no addon messaging", function()
+        _G.PopperpigRaidCallDB = nil
+        _G.PopperpigRaidCall = nil
+        local env = stubs.install({
+            modern = opts.modern, worldState = opts.worldState,
+            missingEvents = { CHAT_MSG_ADDON = true },
+        })
+        env.units.player = { name = "Popperpig", class = "WARRIOR", guid = "Player-0-1" }
+        local addon = loadAddon(env)
+
+        addon.State:StartTest("hyjal_winterchill")
+        addon.State:Advance("local")
+        eq(addon.State:Current().id, "wave2", "state machine still works with no comms")
+        env.restore()
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -1202,7 +1539,9 @@ for _, profile in ipairs(PROFILES) do
     suiteCore(profile.name, profile.opts)
     suiteState(profile.name, profile.opts)
     suiteHUD(profile.name, profile.opts)
+    suiteCodec(profile.name, profile.opts)
     suiteDetect(profile.name, profile.opts)
+    suiteComm(profile.name, profile.opts)
     suiteRateLimit(profile.name, profile.opts)
     suiteCallBoard(profile.name, profile.opts)
     suiteCommands(profile.name, profile.opts)

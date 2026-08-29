@@ -16,6 +16,7 @@
 # Adapter must load second: every module below it probes capabilities through it.
 Core\Init.lua
 Core\Adapter.lua
+Core\Codec.lua
 Core\RateLimit.lua
 Core\StateMachine.lua
 
@@ -27,6 +28,7 @@ Data\Hyjal.lua
 
 # --- Core that consumes Data --------------------------------------------
 Core\Detect.lua
+Core\Comm.lua
 
 # --- UI -----------------------------------------------------------------
 # All plain CreateFrame("Frame"). No secure templates, so none of this can taint.

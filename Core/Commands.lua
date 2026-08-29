@@ -138,6 +138,22 @@ register("debug", "/pprc debug", "Toggle debug logging and print the capability 
     PPRC:Print("debug logging %s", PPRC.debugEnabled and "|cff3fae6fon|r" or "|cffc1544aoff|r")
 end)
 
+register("sync", "/pprc sync", "Who is running the addon, and who is out of date.", function()
+    if not PPRC.Comm then
+        PPRC:Print("sync is not loaded")
+        return
+    end
+    PPRC:Print("sync: %s", PPRC.Comm:VersionReport())
+    if PPRC.Comm:HasController() then
+        PPRC:Print("following |cff8fe04b%s|r", PPRC.Comm.controller)
+    elseif PPRC.Adapter:CanBroadcast() then
+        PPRC:Print("you are driving")
+    else
+        PPRC:Print("|cffc1544ano one is broadcasting|r - nobody with assist is running it")
+    end
+    PPRC.Comm:RequestState()
+end)
+
 register("scan", "/pprc scan", "Dump live world state and every NPC id seen, for correcting Data/.", function()
     if not PPRC.Detect then
         PPRC:Print("detection is not loaded")
