@@ -905,6 +905,286 @@ local function suiteCallBoard(profile, opts)
     end)
 end
 
+-- Feed the classifier a sequence of world-state readings.
+local function feedWorldState(addon, env, sequence, slots)
+    for _, value in ipairs(sequence) do
+        if slots then
+            env.worldStateUI = { { slots.label or "Wave", value } }
+        else
+            env.worldStateUI = { { "Counter: " .. value } }
+        end
+        addon.Detect:OnWorldStateUpdate()
+    end
+end
+
+local function suiteDetect(profile, opts)
+    group("Detect [" .. profile .. "]")
+
+    it("loads the right data module from the instance id", function()
+        scenario(opts, function(addon, env)
+            env.instance = { name = "The Battle for Mount Hyjal", mapID = 534 }
+            addon.Detect:CheckZone()
+            truthy(addon.State.instance, "instance set")
+            eq(addon.State.instance.id, "hyjal", "hyjal loaded")
+
+            env.instance = { name = "Orgrimmar", mapID = 1 }
+            addon.Detect:CheckZone()
+            isNil(addon.State.instance, "cleared on leaving")
+        end)
+    end)
+
+    -- Tier 1: the counter climbs, so it is a wave number.
+    it("classifies a climbing counter as the wave number and follows it", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_winterchill")
+            feedWorldState(addon, env, { 1, 2, 3 })
+
+            eq(addon.Detect.waveMode, "WAVE_NUMBER", "tier 1 resolved")
+            eq(addon.State:Current().id, "wave3", "followed the counter")
+
+            feedWorldState(addon, env, { 6 })
+            eq(addon.State:Current().id, "wave6", "jumped with the counter")
+        end)
+    end)
+
+    -- Tier 2: the counter decays and resets, so it is enemies remaining and
+    -- each upward jump means a new wave spawned.
+    it("classifies a decaying counter as enemies remaining and counts resets", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_anetheron")   -- RL sits on wave 1
+            -- 12 -> 8 -> 3 (wave 1 dying), then 12 again (wave 2 spawned)
+            feedWorldState(addon, env, { 12, 8, 3, 12 })
+
+            eq(addon.Detect.waveMode, "ENEMIES_REMAINING", "tier 2 resolved")
+            -- Seeded from the RL's current wave, so a reset means wave 2, not
+            -- "one reset". Counting from zero would put the whole clear an
+            -- entire wave behind.
+            eq(addon.Detect.waveCount, 2, "counted on from the current wave")
+            eq(addon.State:Current().id, "wave2", "state followed")
+
+            feedWorldState(addon, env, { 9, 2, 14 })
+            eq(addon.Detect.waveCount, 3, "second reset counted")
+            eq(addon.State:Current().id, "wave3", "state followed the count")
+        end)
+    end)
+
+    -- Tier 3: nothing readable at all.
+    it("falls back to manual when the world state reads nothing", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_winterchill")
+            env.worldStateUI = {}
+            addon.Detect:OnWorldStateUpdate()
+
+            eq(addon.Detect.waveMode, "MANUAL", "tier 3")
+            eq(addon.State:Current().id, "wave1", "state untouched, RL drives")
+        end)
+    end)
+
+    it("stays uncommitted until it has enough behaviour to judge", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_winterchill")
+            feedWorldState(addon, env, { 1, 2 })
+            isNil(addon.Detect.waveMode, "no verdict from two samples")
+
+            feedWorldState(addon, env, { 3 })
+            eq(addon.Detect.waveMode, "WAVE_NUMBER", "verdict on the third")
+        end)
+    end)
+
+    it("ignores a constant number and picks the one that actually moves", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_winterchill")
+            -- Slot 1 is a fixed 25 (raid size, say); slot 2 is the real wave.
+            for _, wave in ipairs({ 1, 2, 3, 4 }) do
+                env.worldStateUI = { { "Players: 25" }, { "Wave " .. wave } }
+                addon.Detect:OnWorldStateUpdate()
+            end
+
+            eq(addon.Detect.waveMode, "WAVE_NUMBER", "classified")
+            eq(addon.Detect.waveSlot, 2, "picked the moving slot, not the first one")
+            eq(addon.State:Current().id, "wave4", "followed the right number")
+        end)
+    end)
+
+    it("seeds the reset count from where the RL already is", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_kazrogal")
+            addon.State:GoToStep(4, "local")          -- RL is already on wave 4
+            feedWorldState(addon, env, { 10, 6, 2, 11 })
+
+            eq(addon.Detect.waveMode, "ENEMIES_REMAINING", "tier 2")
+            eq(addon.Detect.waveCount, 5, "counted on from wave 4, not from zero")
+        end)
+    end)
+
+    it("does not drive state on a client that is only following", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_winterchill")
+            addon.State.testMode = false
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 0, isPlayer = true } })
+
+            feedWorldState(addon, env, { 1, 2, 3, 5 })
+            eq(addon.Detect.waveMode, "WAVE_NUMBER", "still classifies, for debug")
+            eq(addon.State:Current().id, "wave1", "but did not move the state")
+        end)
+    end)
+
+    it("surfaces the encounter a known NPC belongs to", function()
+        scenario(opts, function(addon, env)
+            env.instance = { name = "The Battle for Mount Hyjal", mapID = 534 }
+            addon.Detect:CheckZone()
+            addon.State:SetEncounter("hyjal_winterchill", "local")
+
+            env.combatLog("SPELL_DAMAGE", "Creature-0-1-534-0-17842-1", "Azgalor",
+                "Player-0-1", "Popperpig")
+            eq(addon.State.encounterID, "hyjal_azgalor", "jumped to the right encounter")
+        end)
+    end)
+
+    it("records an NPC it does not have on file instead of ignoring it", function()
+        scenario(opts, function(addon, env)
+            env.instance = { name = "The Battle for Mount Hyjal", mapID = 534 }
+            addon.Detect:CheckZone()
+
+            env.combatLog("SPELL_DAMAGE", "Creature-0-1-534-0-99999-1", "Unknown Horror",
+                "Player-0-1", "Popperpig")
+
+            eq(addon.Detect.seenNPCs[99999], "Unknown Horror", "harvested for /pprc scan")
+            local report = table.concat(addon.Detect:ScanReport(), "\n")
+            truthy(report:find("NOT IN Data/", 1, true), "flagged as a gap")
+        end)
+    end)
+
+    it("does not re-fire state for the same NPC on every combat log line", function()
+        scenario(opts, function(addon, env)
+            env.instance = { name = "The Battle for Mount Hyjal", mapID = 534 }
+            addon.Detect:CheckZone()
+
+            local fires = 0
+            addon:Listen("STATE_CHANGED", function() fires = fires + 1 end)
+
+            for _ = 1, 50 do
+                env.combatLog("SPELL_DAMAGE", "Creature-0-1-534-0-17767-1", "Rage Winterchill",
+                    "Player-0-1", "Popperpig")
+            end
+            eq(fires, 1, "fifty combat log lines, one state change")
+        end)
+    end)
+
+    it("advances a phase when boss health crosses the threshold", function()
+        scenario(opts, function(addon, env)
+            addon:RegisterInstance({
+                id = "fixture", mapID = 9999, name = "Fixture", order = { "fx_boss" },
+                encounters = { fx_boss = { name = "Fixture Boss", npcID = 4242, steps = {
+                    { id = "p1", label = "Phase 1", advance = "manual" },
+                    { id = "p2", label = "Phase 2", advance = "health_pct", healthPct = 65 },
+                } } },
+            })
+            addon.State:StartTest("fx_boss")
+
+            env.units.target = { name = "Fixture Boss", guid = "Creature-0-1-9999-0-4242-1", hp = 80, hpMax = 100 }
+            addon.Detect:PollHealth()
+            eq(addon.State:Current().id, "p1", "80% has not crossed 65%")
+
+            env.units.target.hp = 60
+            addon.Detect:PollHealth()
+            eq(addon.State:Current().id, "p2", "crossed the threshold")
+        end)
+    end)
+
+    it("leaves phases to the RL when there is no health source", function()
+        scenario(opts, function(addon, env)
+            addon:RegisterInstance({
+                id = "fixture2", mapID = 9998, name = "Fixture", order = { "fx2" },
+                encounters = { fx2 = { name = "Fixture Boss", npcID = 4243, steps = {
+                    { id = "p1", label = "Phase 1", advance = "manual" },
+                    { id = "p2", label = "Phase 2", advance = "health_pct", healthPct = 65 },
+                } } },
+            })
+            addon.State:StartTest("fx2")
+
+            -- Nothing targeted, no boss tokens: BossHealthPct returns nil.
+            addon.Detect:PollHealth()
+            eq(addon.State:Current().id, "p1", "degraded to manual rather than guessing")
+        end)
+    end)
+
+    it("only polls health while the next step is gated on it", function()
+        scenario(opts, function(addon)
+            addon:RegisterInstance({
+                id = "fixture3", mapID = 9997, name = "Fixture", order = { "fx3" },
+                encounters = { fx3 = { name = "Fixture Boss", npcID = 4244, steps = {
+                    { id = "p1", label = "Phase 1", advance = "manual" },
+                    { id = "p2", label = "Phase 2", advance = "health_pct", healthPct = 65 },
+                    { id = "p3", label = "Phase 3", advance = "manual" },
+                } } },
+            })
+            addon.State:StartTest("fx3")
+            truthy(addon.Detect.healthTicker, "polling while a health step is next")
+
+            addon.State:GoToStep(2, "local")
+            isNil(addon.Detect.healthTicker, "stopped once it is not")
+        end)
+    end)
+
+    it("reads a wipe from the bodies on the floor", function()
+        scenario(opts, function(addon, env)
+            local members = {}
+            for i = 1, 10 do
+                members[i] = { name = "P" .. i, class = "MAGE", dead = i <= 8, isPlayer = i == 1 }
+            end
+            env.buildRaid(members)
+
+            local wiped
+            addon:Listen("COMBAT_END", function(w) wiped = w end)
+            env.fire("PLAYER_REGEN_ENABLED")
+            eq(wiped, true, "8 of 10 dead reads as a wipe")
+        end)
+    end)
+
+    it("does not read a clean kill as a wipe", function()
+        scenario(opts, function(addon, env)
+            local members = {}
+            for i = 1, 10 do
+                members[i] = { name = "P" .. i, class = "MAGE", dead = i <= 2, isPlayer = i == 1 }
+            end
+            env.buildRaid(members)
+
+            local wiped, wipeFired = nil, false
+            addon:Listen("COMBAT_END", function(w) wiped = w end)
+            addon:Listen("WIPE_DETECTED", function() wipeFired = true end)
+            env.fire("PLAYER_REGEN_ENABLED")
+
+            eq(wiped, false, "2 of 10 dead is a kill, not a wipe")
+            falsy(wipeFired, "no wipe signal")
+        end)
+    end)
+
+    it("names the active tier for each chain", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_winterchill")
+            local report = table.concat(addon.Detect:TierReport(), "\n")
+            truthy(report:find("not yet classified", 1, true), "honest before it knows")
+
+            feedWorldState(addon, env, { 1, 2, 3 })
+            report = table.concat(addon.Detect:TierReport(), "\n")
+            truthy(report:find("tier 1", 1, true), "names tier 1 once resolved")
+        end)
+    end)
+
+    it("resets its wave tracking when the instance changes", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_winterchill")
+            feedWorldState(addon, env, { 1, 2, 3 })
+            eq(addon.Detect.waveMode, "WAVE_NUMBER", "classified")
+
+            env.instance = { name = "Orgrimmar", mapID = 1 }
+            addon.Detect:CheckZone()
+            isNil(addon.Detect.waveMode, "classification cleared on leaving")
+        end)
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -922,6 +1202,7 @@ for _, profile in ipairs(PROFILES) do
     suiteCore(profile.name, profile.opts)
     suiteState(profile.name, profile.opts)
     suiteHUD(profile.name, profile.opts)
+    suiteDetect(profile.name, profile.opts)
     suiteRateLimit(profile.name, profile.opts)
     suiteCallBoard(profile.name, profile.opts)
     suiteCommands(profile.name, profile.opts)

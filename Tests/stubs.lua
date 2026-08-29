@@ -208,6 +208,24 @@ function stubs.install(opts)
         return inst.name, "raid", 1, "Normal", 25, 0, false, inst.mapID, 25
     end)
 
+    -- --- combat log ---------------------------------------------------------
+    -- The real event carries no payload; the data comes from this call.
+    set("CombatLogGetCurrentEventInfo", function()
+        local e = env.combatLogEvent
+        if not e then return nil end
+        return unpack(e)
+    end)
+
+    -- Fire one combat-log line with the documented argument layout.
+    function env.combatLog(subevent, sourceGUID, sourceName, destGUID, destName)
+        env.combatLogEvent = {
+            env.now, subevent, false,
+            sourceGUID, sourceName, 0, 0,
+            destGUID, destName, 0, 0,
+        }
+        env.fire("COMBAT_LOG_EVENT_UNFILTERED")
+    end
+
     -- --- outbound -----------------------------------------------------------
     set("SendChatMessage", function(msg, channel, lang, target)
         env.chat[#env.chat + 1] = { msg = msg, channel = channel, target = target, at = env.now }

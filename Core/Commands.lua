@@ -138,6 +138,15 @@ register("debug", "/pprc debug", "Toggle debug logging and print the capability 
     PPRC:Print("debug logging %s", PPRC.debugEnabled and "|cff3fae6fon|r" or "|cffc1544aoff|r")
 end)
 
+register("scan", "/pprc scan", "Dump live world state and every NPC id seen, for correcting Data/.", function()
+    if not PPRC.Detect then
+        PPRC:Print("detection is not loaded")
+        return
+    end
+    for _, line in ipairs(PPRC.Detect:ScanReport()) do PPRC:Print(line) end
+    PPRC:Print("|cff6c7c6eAnything marked NOT IN Data/ is a gap. Paste this into SPIKES.md against the build number.|r")
+end)
+
 register("log", "/pprc log", "Print the recent debug log.", function()
     if #PPRC.logBuffer == 0 then
         PPRC:Print("log is empty")

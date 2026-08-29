@@ -182,6 +182,43 @@ function A:NPCID(guid)
 end
 
 -- ---------------------------------------------------------------------------
+-- Combat log
+--
+-- COMBAT_LOG_EVENT_UNFILTERED carries no payload on this client -- the data
+-- comes from CombatLogGetCurrentEventInfo(). Rather than index the documented
+-- positions for sourceGUID (4) and destGUID (8), scan every return for
+-- something that parses as a creature GUID. Same reasoning as the world state
+-- reader: a shifted signature must not silently change what we read.
+--
+-- The name is taken from the slot immediately after each GUID, which is
+-- position-relative rather than absolute, so it survives the same shift.
+-- ---------------------------------------------------------------------------
+
+function A:CombatLogUnits()
+    local found = {}
+    if not isFunc(_G.CombatLogGetCurrentEventInfo) then return found end
+
+    local packed = { pcall(_G.CombatLogGetCurrentEventInfo) }
+    if not packed[1] then return found end
+    table.remove(packed, 1)
+
+    for i = 1, #packed do
+        local value = packed[i]
+        if type(value) == "string" then
+            local npcID = self:NPCID(value)
+            if npcID then
+                local name = packed[i + 1]
+                found[#found + 1] = {
+                    npcID = npcID,
+                    name  = (type(name) == "string" and not name:find("%-%d+%-")) and name or nil,
+                }
+            end
+        end
+    end
+    return found
+end
+
+-- ---------------------------------------------------------------------------
 -- Boss units (spike S3)
 --
 -- Ordered by reliability. bossTokens caches itself the first time it can be

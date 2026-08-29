@@ -25,6 +25,9 @@ Core\StateMachine.lua
 Data\Calls.lua
 Data\Hyjal.lua
 
+# --- Core that consumes Data --------------------------------------------
+Core\Detect.lua
+
 # --- UI -----------------------------------------------------------------
 # All plain CreateFrame("Frame"). No secure templates, so none of this can taint.
 UI\Widgets.lua
