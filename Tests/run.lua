@@ -446,9 +446,23 @@ local function suiteState(profile, opts)
             eq(hyjal.unverified, 0, "none left unbacked")
             eq(hyjal.verified, 0, "and none claims live-client confirmation")
 
-            -- Black Temple has had no such source, and still says so.
+            -- Black Temple is now sourced from cosmophile's guide.
             local bt = addon.Instances.blacktemple
-            eq(bt.unverified, bt.total, "Black Temple remains unbacked")
+            eq(bt.sourced, bt.total, "every Black Temple step is sourced")
+            eq(bt.unverified, 0, "none left unbacked")
+
+            -- A step with no source at all still counts as unbacked, so the
+            -- distinction keeps working for anything added later.
+            addon:RegisterInstance({
+                id = "prov_fixture", mapID = 7777, name = "Fixture", order = { "pf" },
+                encounters = { pf = { name = "Fixture", steps = {
+                    { id = "sourced", label = "A", advance = "manual", source = "somebody" },
+                    { id = "bare",    label = "B", advance = "manual" },
+                } } },
+            })
+            local fixture = addon.Instances.prov_fixture
+            eq(fixture.sourced, 1, "sourced step counted")
+            eq(fixture.unverified, 1, "bare step still counted as unbacked")
         end)
     end)
 
@@ -596,19 +610,30 @@ local function suiteHUD(profile, opts)
 
     it("flags a step backed by nothing, and only that", function()
         scenario(opts, function(addon)
-            -- Black Temple still has no cited source.
-            addon.State:StartTest("bt_najentus")
+            -- Both raids are sourced now, so the unbacked case needs a fixture.
+            addon:RegisterInstance({
+                id = "tag_fixture", mapID = 7778, name = "Fixture", order = { "tf" },
+                encounters = { tf = { name = "Fixture", steps = {
+                    { id = "bare", label = "Bare step", advance = "manual" },
+                } } },
+            })
+
+            addon.State:StartTest("tf")
             addon.HUD:Refresh()
             eq(addon.HUD.unverifiedTag:GetText(), "unverified", "flagged when unbacked")
 
-            -- Hyjal comes from a real raid-leader sheet, so it renders clean.
-            -- Tagging sourced data would train people to ignore the tag.
+            -- Real data comes from cited guides, so it renders clean. Tagging
+            -- sourced data would train people to ignore the tag.
             addon.State:StartTest("hyjal_winterchill")
             addon.HUD:Refresh()
-            eq(addon.HUD.unverifiedTag:GetText(), "", "no tag on sourced data")
+            eq(addon.HUD.unverifiedTag:GetText(), "", "no tag on Hyjal (jurdi)")
+
+            addon.State:StartTest("bt_najentus")
+            addon.HUD:Refresh()
+            eq(addon.HUD.unverifiedTag:GetText(), "", "no tag on Black Temple (cosmophile)")
 
             -- And live-client confirmation clears it too.
-            addon.State:StartTest("bt_najentus")
+            addon.State:StartTest("tf")
             addon.State:Current().verified = true
             addon.HUD:Refresh()
             eq(addon.HUD.unverifiedTag:GetText(), "", "no tag on confirmed data")
@@ -2302,7 +2327,7 @@ local function suiteBlackTemple(profile, opts)
         end)
     end)
 
-    it("names Shadow Prison and Maiev's trap in the 30% phase", function()
+    it("names the phase 5 enrage and Maiev's traps", function()
         scenario(opts, function(addon)
             local illidan = addon:GetEncounter("bt_illidan")
             local phase5
@@ -2310,18 +2335,20 @@ local function suiteBlackTemple(profile, opts)
                 if step.id == "phase5" then phase5 = step end
             end
 
-            -- These are the only two things that matter at 30%; the previous
-            -- text said "Bloodlust and burn" and mentioned neither.
-            truthy(phase5.call:find("Shadow Prison", 1, true), "warns about the raid-wide stun")
+            -- The two things that decide phase 5. The previous text said
+            -- "Bloodlust and burn" and mentioned neither.
+            truthy(phase5.call:lower():find("enrage", 1, true), "warns about the enrage")
             truthy(phase5.call:lower():find("trap", 1, true), "tells them to use the trap")
 
             local briefText = ""
             for _, entry in ipairs(phase5.brief or {}) do
                 briefText = briefText .. " " .. (entry.spell or "") .. " " .. entry.text
             end
-            truthy(briefText:find("Shadow Trap", 1, true), "brief covers the trap")
-            truthy(briefText:find("alternate", 1, true) or briefText:find("timer", 1, true),
-                "brief explains the phase alternation")
+            truthy(briefText:find("Cage Trap", 1, true), "brief covers the trap")
+            truthy(briefText:upper():find("REMOVES THE ENRAGE", 1, true),
+                "and that the trap is what strips the enrage")
+            truthy(briefText:find("timer rather than a health gate", 1, true),
+                "brief explains demon form is on a timer")
         end)
     end)
 
@@ -2346,29 +2373,178 @@ local function suiteBlackTemple(profile, opts)
             local briefText = ""
             for _, entry in ipairs(boss.brief or {}) do briefText = briefText .. " " .. entry.text end
             truthy(briefText:find("cannot free themselves", 1, true), "says the impaled player is helpless")
-            truthy(briefText:find("THAT raider", 1, true), "and that the rescuer gets the spine")
-            truthy(boss.call:find("free them", 1, true), "call addresses the rescuer")
+            truthy(briefText:find("KEEPS it", 1, true), "and that the rescuer keeps the spine")
+            truthy(boss.call:lower():find("click the spine", 1, true), "call addresses the rescuer")
         end)
     end)
 
-    it("marks all of its data unverified", function()
+    it("cites cosmophile on every step without claiming live confirmation", function()
         scenario(opts, function(addon)
             local bt = addon.Instances.blacktemple
-            eq(bt.unverified, bt.total, "nothing claims to be confirmed yet")
+            eq(bt.sourced, bt.total, "every step cites a source")
+            eq(bt.verified, 0, "and none claims live-client confirmation")
+
+            for _, encounterID in ipairs(bt.order) do
+                for _, step in ipairs(addon:GetEncounter(encounterID).steps) do
+                    eq(step.source, "cosmophile", encounterID .. "/" .. step.id .. " source")
+                end
+            end
         end)
     end)
 
-    it("leaves a trash pack unkeyed rather than guessing its NPC id", function()
+    -- Each of these pins an error cosmophile's guide caught. They exist so a
+    -- later "tidy up" cannot quietly reintroduce any of them.
+
+    it("names Hateful Strike and the most-health rule on Supremus", function()
         scenario(opts, function(addon)
-            local packs = addon.TrashPacks.blacktemple
-            truthy(#packs > 0, "packs defined")
+            local text = ""
+            for _, step in ipairs(addon:GetEncounter("bt_supremus").steps) do
+                text = text .. " " .. step.call .. " " .. table.concat(step.warn, " ")
+                for _, e in ipairs(step.brief or {}) do text = text .. " " .. (e.spell or "") .. " " .. e.text end
+            end
+            truthy(text:find("Hateful Strike", 1, true), "correct ability name")
+            falsy(text:find("Hurtful", 1, true), "the wrong name is gone")
+            truthy(text:upper():find("MOST HEALTH", 1, true), "the most-health rule, not just second on threat")
+            truthy(text:find("40 yards", 1, true), "the charge distance")
+            truthy(text:lower():find("threat drops", 1, true), "the phase-1 threat drop")
+        end)
+    end)
 
-            local byID = {}
-            for _, pack in ipairs(packs) do byID[pack.id] = pack end
+    it("gates the Naj'entus shield break on raid health", function()
+        scenario(opts, function(addon)
+            local boss
+            for _, step in ipairs(addon:GetEncounter("bt_najentus").steps) do
+                if step.id == "boss" then boss = step end
+            end
+            local briefText = ""
+            for _, e in ipairs(boss.brief) do briefText = briefText .. " " .. (e.spell or "") .. " " .. e.text end
 
-            truthy(#byID.promenade.npcIDs > 0, "the pack we know is keyed")
-            eq(#byID.channelers.npcIDs, 0, "the one we do not know is left unkeyed, not guessed")
-            truthy(byID.channelers.call, "but it still carries the call to make")
+            truthy(briefText:find("Tidal Burst", 1, true), "names the burst")
+            truthy(briefText:find("8,500", 1, true), "states the raid damage")
+            truthy(briefText:find("8,501", 1, true), "and the health everyone needs")
+            truthy(boss.call:find("8,500", 1, true), "the call carries the gate too")
+            local checklist = table.concat(addon:GetEncounter("bt_najentus").checklist, " ")
+            truthy(checklist:find("8,501", 1, true), "and it is on the pre-pull checklist")
+        end)
+    end)
+
+    it("has Akama's add roles the right way round", function()
+        scenario(opts, function(addon)
+            local text = ""
+            for _, step in ipairs(addon:GetEncounter("bt_akama").steps) do
+                text = text .. " " .. step.call
+                for _, e in ipairs(step.brief or {}) do text = text .. " " .. (e.spell or "") .. " " .. e.text end
+            end
+            -- Spiritbinders heal; Sorcerers cannot be tanked. I had these swapped.
+            truthy(text:find("Spiritbinder", 1, true), "names the actual healer")
+            truthy(text:upper():find("CANNOT BE TANKED", 1, true), "sorcerers cannot be tanked")
+            falsy(text:find("Sorcerers heal", 1, true), "the old wrong claim is gone")
+            truthy(text:find("60 seconds", 1, true), "the phase 2 kill window")
+        end)
+    end)
+
+    it("treats Shear as a max-HP cut, not a tank swap", function()
+        scenario(opts, function(addon)
+            local illidan = addon:GetEncounter("bt_illidan")
+            local phase1, brief
+            for _, step in ipairs(illidan.steps) do
+                if step.id == "phase1" then phase1 = step end
+                if step.brief then brief = step.brief end
+            end
+            local briefText = ""
+            for _, e in ipairs(brief) do briefText = briefText .. " " .. (e.spell or "") .. " " .. e.text end
+
+            truthy(briefText:find("60%", 1, true), "the max-health reduction")
+            truthy(briefText:upper():find("CANNOT MISS", 1, true), "that it cannot miss")
+            truthy(briefText:find("Shield Block", 1, true), "the actual counter")
+            falsy(phase1.call:lower():find("swap", 1, true), "no stale tank-swap instruction")
+            -- Draw Soul's heal is why melee stay out of the front.
+            truthy(briefText:find("100,000", 1, true), "Draw Soul's heal")
+            truthy(briefText:find("Uncaged Wrath", 1, true), "the 25-yard wipe mechanic")
+            truthy(briefText:find("25 yards", 1, true), "and its distance")
+        end)
+    end)
+
+    it("exempts Shahraz tanks from shadow resistance", function()
+        scenario(opts, function(addon)
+            local shahraz = addon:GetEncounter("bt_shahraz")
+            local checklist = table.concat(shahraz.checklist, " ")
+            truthy(checklist:find("174", 1, true), "the raid minimum")
+            truthy(checklist:upper():find("TANKS ARE EXEMPT", 1, true), "tanks do not wear resist gear")
+
+            local text = ""
+            for _, step in ipairs(shahraz.steps) do
+                text = text .. " " .. step.call
+                for _, e in ipairs(step.brief or {}) do text = text .. " " .. (e.spell or "") .. " " .. e.text end
+            end
+            truthy(text:find("IMMUNITY TO FATAL ATTRACTION", 1, true), "why three tanks stack")
+            truthy(text:find("Prismatic Shield", 1, true), "correct ability name")
+            falsy(text:find("Prismatic Aura", 1, true), "the wrong name is gone")
+            truthy(text:find("Beams", 1, true), "the beams exist at all")
+        end)
+    end)
+
+    it("names the mage tank on Zerevor", function()
+        scenario(opts, function(addon)
+            local council = addon:GetEncounter("bt_council")
+            local text = table.concat(council.checklist, " ")
+            for _, step in ipairs(council.steps) do
+                text = text .. " " .. step.call
+                for _, e in ipairs(step.brief or {}) do text = text .. " " .. (e.spell or "") .. " " .. e.text end
+            end
+            truthy(text:upper():find("MAGE", 1, true), "a mage tanks him")
+            truthy(text:find("Zerevor", 1, true), "named")
+            truthy(text:find("Dampen Magic", 1, true), "what they spellsteal")
+            truthy(text:find("100,000", 1, true), "Circle of Healing's heal on all four")
+        end)
+    end)
+
+    it("describes Insignificance as a snapshot, not a threat wipe", function()
+        scenario(opts, function(addon)
+            local text = ""
+            for _, step in ipairs(addon:GetEncounter("bt_bloodboil").steps) do
+                text = text .. " " .. step.call
+                for _, e in ipairs(step.brief or {}) do text = text .. " " .. (e.spell or "") .. " " .. e.text end
+            end
+            truthy(text:upper():find("NOT A THREAT", 1, true), "explicitly not a reset")
+            truthy(text:lower():find("snapshot", 1, true), "it is a snapshot")
+            truthy(text:lower():find("furthest", 1, true), "Blood Boil hits the furthest players")
+            truthy(text:find("7-10", 1, true), "the Acidic Wound swap window")
+        end)
+    end)
+
+    it("says healing is impossible in Reliquary phase 1", function()
+        scenario(opts, function(addon)
+            local text = ""
+            for _, step in ipairs(addon:GetEncounter("bt_reliquary").steps) do
+                text = text .. " " .. step.call
+                for _, e in ipairs(step.brief or {}) do text = text .. " " .. (e.spell or "") .. " " .. e.text end
+            end
+            truthy(text:lower():find("no threat table", 1, true) or text:lower():find("closest", 1, true),
+                "no threat table, he hits the closest")
+            truthy(text:lower():find("healers, dps", 1, true) or text:lower():find("healers dps", 1, true),
+                "healers DPS instead")
+            truthy(text:find("reflect", 1, true), "phase 2 reflects damage")
+            truthy(text:lower():find("stance dance", 1, true), "the Soul Scream rage dump")
+        end)
+    end)
+
+    it("carries spell ids, the first machine-checkable data in the repo", function()
+        scenario(opts, function(addon)
+            local withID, total = 0, 0
+            for _, encounterID in ipairs(addon.Instances.blacktemple.order) do
+                for _, step in ipairs(addon:GetEncounter(encounterID).steps) do
+                    for _, e in ipairs(step.brief or {}) do
+                        total = total + 1
+                        if e.spellID then
+                            withID = withID + 1
+                            truthy(type(e.spellID) == "number" and e.spellID > 0,
+                                encounterID .. " spellID for " .. tostring(e.spell))
+                        end
+                    end
+                end
+            end
+            truthy(withID >= 40, "most brief entries carry a spell id (got " .. withID .. "/" .. total .. ")")
         end)
     end)
 
