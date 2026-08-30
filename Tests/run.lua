@@ -2133,7 +2133,7 @@ local function suiteRosterUI(profile, opts)
         end)
     end)
 
-    it("says there is nothing to push on a step with no diagram", function()
+    it("says there is nothing to push when a step has neither diagram nor roles", function()
         scenario(opts, function(addon, env)
             teronRaid(env)
             registerTeronFixture(addon)
@@ -2141,7 +2141,7 @@ local function suiteRosterUI(profile, opts)
             addon.RosterUI:Show()
 
             falsy(addon.RosterUI:Push(), "refused")
-            truthy(addon.RosterUI.footerNote:GetText():find("no diagram", 1, true), "and says why")
+            truthy(addon.RosterUI.footerNote:GetText():find("nothing to assign", 1, true), "and says why")
         end)
     end)
 end
@@ -2935,6 +2935,173 @@ local function suiteZones(profile, opts)
     end)
 end
 
+local function suiteRoute(profile, opts)
+    group("BT route [" .. profile .. "]")
+
+    it("covers every boss that has trash before it", function()
+        scenario(opts, function(addon)
+            truthy(addon.Route, "route defined")
+            for _, encounterID in ipairs(addon.RouteOrder) do
+                local route = addon.Route[encounterID]
+                truthy(route, encounterID .. " has a route")
+                truthy(addon:GetEncounter(encounterID), encounterID .. " is a real encounter")
+                truthy(#route.pulls > 0, encounterID .. " has pulls")
+                for _, pull in ipairs(route.pulls) do
+                    truthy(type(pull.n) == "number", encounterID .. " pull numbered")
+                    truthy(pull.mobs and #pull.mobs > 0, encounterID .. " pull " .. pull.n .. " has mobs")
+                end
+            end
+        end)
+    end)
+
+    it("keeps the skips, which are the part that goes wrong", function()
+        scenario(opts, function(addon)
+            -- Half the raid reading the guide and half not is exactly how a
+            -- skipped pack gets pulled, so skips are data, not prose.
+            local skips = 0
+            for _, route in pairs(addon.Route) do
+                for _, pull in ipairs(route.pulls) do
+                    if pull.skip then skips = skips + 1 end
+                end
+            end
+            truthy(skips > 0, "skippable pulls are marked")
+
+            truthy(addon.Route.bt_najentus.note:find("RIGHT WALL", 1, true), "the Aqueous Lord skip")
+            truthy(addon.Route.bt_supremus.note:lower():find("spiked wall", 1, true), "the Wyrmcaller skip")
+        end)
+    end)
+
+    it("prints a route with its pull numbers and skips", function()
+        scenario(opts, function(addon, env)
+            addon.Commands:Run("route bt_najentus")
+            local out = table.concat(env.printed, "\n")
+            truthy(out:find("Naj'entus", 1, true), "names the boss")
+            truthy(out:find("10 Aqueous Spawns", 1, true), "lists the messy pull")
+            truthy(out:find("RIGHT WALL", 1, true), "carries the route note")
+
+            addon.Commands:Run("route bt_council")
+            out = table.concat(env.printed, "\n")
+            truthy(out:find("SKIPPABLE", 1, true), "flags skippable packs")
+        end)
+    end)
+
+    it("says so rather than erroring when there is no route", function()
+        scenario(opts, function(addon, env)
+            addon.Commands:Run("route hyjal_winterchill")
+            truthy(table.concat(env.printed, "\n"):find("no route", 1, true), "explained")
+        end)
+    end)
+end
+
+local function suiteRoles(profile, opts)
+    group("Roles [" .. profile .. "]")
+
+    it("defines role templates only for real encounters", function()
+        scenario(opts, function(addon)
+            local count = 0
+            for encounterID, groups in pairs(addon.Roles) do
+                truthy(addon:GetEncounter(encounterID), encounterID .. " is a real encounter")
+                truthy(#groups > 0, encounterID .. " has groups")
+                for _, g in ipairs(groups) do
+                    truthy(g.group and #g.group > 0, encounterID .. " group is named")
+                    truthy(g.slots and #g.slots > 0, encounterID .. "/" .. tostring(g.group) .. " has slots")
+                end
+                count = count + 1
+            end
+            truthy(count >= 14, "both raids covered (got " .. count .. ")")
+        end)
+    end)
+
+    it("flattens Illidan's template into unique keys", function()
+        scenario(opts, function(addon)
+            local slots = addon:RoleSlots("bt_illidan")
+            truthy(slots, "template exists")
+
+            local keys = {}
+            for _, slot in ipairs(slots) do
+                falsy(keys[slot.key], "duplicate key: " .. slot.key)
+                keys[slot.key] = true
+            end
+
+            -- Flames of Azzinoth repeats "Heal" four times across two tanks;
+            -- the labels stay readable while the keys stay distinct.
+            local heals = 0
+            for _, slot in ipairs(slots) do
+                if slot.group == "Flames of Azzinoth" and slot.label == "Heal" then heals = heals + 1 end
+            end
+            eq(heals, 4, "two heals per flame, labels unchanged")
+            truthy(#slots >= 15, "full template flattened")
+        end)
+    end)
+
+    it("assigns through the same path as a map slot", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({
+                { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true },
+                { name = "Vexmoor",   class = "WARLOCK" },
+            })
+            addon.State:StartTest("bt_illidan")
+            addon.RosterUI:Show()
+
+            local slots = addon:RoleSlots("bt_illidan")
+            local warlockSlot
+            for _, slot in ipairs(slots) do
+                if slot.label == "Warlock Tank" then warlockSlot = slot.key end
+            end
+            truthy(warlockSlot, "found the warlock tank slot")
+
+            addon.RosterUI:Select("Vexmoor")
+            addon.RosterUI:OnSlotClick(warlockSlot)
+            eq(addon.Roster:Assignments()[warlockSlot], "Vexmoor", "assigned")
+        end)
+    end)
+
+    it("reports empty slots for an encounter with roles but no diagram", function()
+        scenario(opts, function(addon, env)
+            env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
+            -- Reliquary has a five-deep tank order and no map coordinates.
+            addon.State:StartTest("bt_reliquary")
+            addon.RosterUI:Show()
+
+            local empty, haveSlots = addon.RosterUI:EmptySlots()
+            truthy(haveSlots, "it has slots despite having no diagram")
+            truthy(#empty > 0, "and reports them empty")
+
+            -- And a push is still possible once confirmed, rather than refused
+            -- outright for lack of a map.
+            addon.State.testMode = false
+            addon.RosterUI._confirmPush = true
+            truthy(addon.RosterUI:Push(), "pushable")
+        end)
+    end)
+end
+
+local function suiteWeakAuras(profile, opts)
+    group("WeakAuras [" .. profile .. "]")
+
+    it("shows the encounter's aura alongside the general packs", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("bt_shahraz")
+            addon.Commands:Run("wa")
+            local out = table.concat(env.printed, "\n")
+
+            truthy(out:find("Fatal Attraction", 1, true), "the encounter-specific aura")
+            truthy(out:find("wago.io/7p-NQ6ZJu", 1, true), "with its link")
+            truthy(out:find("Master T6", 1, true), "and the general packs")
+        end)
+    end)
+
+    it("still shows the general packs where there is no specific one", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("bt_najentus")
+            addon.Commands:Run("wa")
+            local out = table.concat(env.printed, "\n")
+            truthy(out:find("Master T6", 1, true), "general packs listed")
+            truthy(out:find("no encounter-specific", 1, true), "and says there is nothing specific")
+        end)
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -2964,6 +3131,9 @@ for _, profile in ipairs(PROFILES) do
     suiteMobPanel(profile.name, profile.opts)
     suiteZones(profile.name, profile.opts)
     suiteBlackTemple(profile.name, profile.opts)
+    suiteRoute(profile.name, profile.opts)
+    suiteRoles(profile.name, profile.opts)
+    suiteWeakAuras(profile.name, profile.opts)
     suiteOptions(profile.name, profile.opts)
     suiteRateLimit(profile.name, profile.opts)
     suiteCallBoard(profile.name, profile.opts)

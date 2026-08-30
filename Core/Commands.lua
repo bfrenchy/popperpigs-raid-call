@@ -62,6 +62,49 @@ register("say", "/pprc say <text>", "Send one line through the throttle, as a ra
     PPRC.RateLimit:SendCall(text)
 end)
 
+register("route", "/pprc route", "Print the trash route for the boss you are heading to.", function(args)
+    local encounterID = args[1] or PPRC.State.encounterID
+    local route = encounterID and PPRC.Route[encounterID] or nil
+
+    if not route then
+        PPRC:Print("no route for %s - try /pprc route <encounter>, or zone in",
+            tostring(encounterID or "the current step"))
+        return
+    end
+
+    PPRC:Print("|cff8fe04bRoute to %s|r", route.boss)
+    if route.note then PPRC:Print("  |cffcda23f%s|r", route.note) end
+    for _, pull in ipairs(route.pulls) do
+        -- Skips are called out rather than hidden: "which pack are we NOT
+        -- pulling" is what goes wrong when half the raid read the guide.
+        PPRC:Print("  |cff6c7c6e%d.|r %s%s", pull.n, pull.mobs,
+            pull.skip and "  |cff5fb0c9[SKIPPABLE]|r" or "")
+        if pull.note then PPRC:Print("      |cff93a294%s|r", pull.note) end
+    end
+end)
+
+register("wa", "/pprc wa", "WeakAura links for this encounter, plus the general packs.", function()
+    local encounterID = PPRC.State.encounterID
+    local specific = encounterID and PPRC.WeakAuras.encounters[encounterID] or nil
+
+    if specific then
+        local encounter = PPRC:GetEncounter(encounterID)
+        PPRC:Print("|cff8fe04bFor %s|r", encounter and encounter.name or encounterID)
+        for _, wa in ipairs(specific) do
+            PPRC:Print("  %s  |cff5fb0c9%s|r", wa.name, wa.url)
+            if wa.note then PPRC:Print("      |cff93a294%s|r", wa.note) end
+        end
+    end
+
+    PPRC:Print("|cff8fe04bGeneral|r")
+    for _, wa in ipairs(PPRC.WeakAuras.general) do
+        PPRC:Print("  %s  |cff5fb0c9%s|r", wa.name, wa.url)
+    end
+    if not specific then
+        PPRC:Print("|cff6c7c6eno encounter-specific auras for this step|r")
+    end
+end)
+
 register("mobs", "/pprc mobs", "Show or hide the pack breakdown for the current wave.", function()
     if PPRC.MobPanel then PPRC.MobPanel:Toggle() end
 end)

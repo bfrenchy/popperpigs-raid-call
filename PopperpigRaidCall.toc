@@ -29,6 +29,9 @@ Data\Calls.lua
 Data\Positions.lua
 Data\Hyjal.lua
 Data\BlackTemple.lua
+Data\BTTrash.lua
+Data\Roles.lua
+Data\WeakAuras.lua
 
 # --- Core that consumes Data --------------------------------------------
 Core\Detect.lua

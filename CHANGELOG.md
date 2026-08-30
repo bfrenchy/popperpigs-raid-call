@@ -7,6 +7,44 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Black Temple rebuilt from cosmophile's guide
+
+All nine encounters rewritten with **spell IDs and exact numbers**, plus the complete
+trash route, per-boss assignment templates and WeakAura links. Both raids are now sourced,
+so the `unverified` tag should not appear in normal play.
+
+- **`/pprc route`** — the Black Temple trash path: numbered pulls matching the guide's own
+  numbering, compositions, handling notes, and the skips flagged explicitly. "Which pack
+  are we *not* pulling" is what goes wrong when half the raid has read the guide.
+- **`/pprc wa`** — WeakAura links for the current encounter plus the general packs, so
+  Shahraz's Fatal Attraction aura is in front of you on that pull.
+- **Assignment templates** (`Data/Roles.lua`) drive a role list in the assignment panel —
+  Illidan's flame tanks and their healers, Reliquary's five-deep tank order and interrupt
+  rotation, the Council's four tanks including the mage. Encounters with roles but no
+  diagram are now pushable; previously a push was refused for lack of a map.
+- `brief` entries carry **`spellID`** — the first machine-checkable game data in the repo.
+
+Corrections the guide forced, roughly by cost:
+
+- **Supremus**: it is **Hateful Strike (41926)**, not "Hurtful", and it hits whoever has
+  the **most health** among 2nd/3rd on threat — a healthy DPS eats it whenever the offtank
+  is low. Phases are a flat 60s and **threat drops returning to phase 1**.
+- **Naj'entus**: popping the shield fires **Tidal Burst for 8,500 to the whole raid**. Hold
+  the spine until everyone is above 8,501. The old data never mentioned the burst.
+- **Akama**: add roles were backwards — Sorcerers **cannot be tanked**, the healers are
+  **Spiritbinders**. Plus doorway tanks and the 60-second phase 2 window.
+- **Illidan**: **Shear (41032)** cuts max health 60% and cannot miss; the counter is Shield
+  Block, not the tank swap previously called for. **Draw Soul heals him 100k**.
+  **Uncaged Wrath** was missing and is an instant wipe at 25 yards.
+- **Shahraz**: tanks are **exempt** from shadow resistance. Saber Lash granting immunity to
+  Fatal Attraction is why three tanks stack. "Prismatic Aura" was wrong twice over.
+- **Council**: **Zerevor must be tanked by a mage** — the fight's defining setup, absent.
+- **Bloodboil / Reliquary**: the soak rotation, Insignificance as a threat *snapshot*, and
+  no threat table or healing in Reliquary phase 1.
+
+Phase 5's Shadow Prison claim came from a web summary the guide does not corroborate, so
+it is gone rather than kept on weaker evidence.
+
 ### Mount Hyjal rebuilt from a real raid-leader source
 
 All 32 waves now carry their **exact compositions** from
@@ -48,10 +86,10 @@ onto Death and Decay. Both are 20 yards. There is now a test for it.
   and druid (Cat Form) outs. **If you ran an earlier build, tell your raid.**
 - **Illidan's phases were structurally wrong.** Demon form was gated at 30%; it is not
   health-gated at all. Phases 3 and 4 alternate on a timer until 30%, and 30% starts phase
-  5 — Shadow Prison stunning the raid for ~30s, then Maiev's Shadow Traps, which are the
-  actual burn window. Shadow Demons moved to demon form where they belong, and the
-  checklist now asks for **capped** fire resistance on flame tanks rather than "where you
-  have it".
+  5 with Maiev's traps, which are the actual burn window. Shadow Demons moved to demon form
+  where they belong, and the checklist now asks for **capped** fire resistance on flame
+  tanks rather than "where you have it". (The phase 5 detail was refined again when
+  cosmophile's guide arrived — see above.)
 - **Naj'entus: the spine call addressed the wrong person.** The impaled player is stunned
   and cannot free themselves. A nearby raider clicks the spine, and *that* raider receives
   the throwable one.
@@ -69,9 +107,8 @@ onto Death and Decay. Both are 20 yards. There is now a test for it.
 
 ### Still unverified
 
-NPC ids everywhere, including Hyjal — they are not in the cheat sheet, and `/pprc scan`
-during a live clear is the way to close that. Black Temple has no cited source at all and
-flags every step accordingly.
+NPC ids everywhere — neither guide lists them, and `/pprc scan` during a live clear is the
+way to close that.
 
 ---
 

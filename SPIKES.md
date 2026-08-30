@@ -96,7 +96,21 @@ confirmation, so `verified` stays false. Two things remain open even for Hyjal:
 - **Wave-to-worldstate mapping is unconfirmed.** The compositions are known; whether the
   counter reports wave number or enemies remaining is still S2.
 
-Black Temple has no equivalent source and remains unbacked throughout.
+## Black Temple — sourced, August 2026
+
+Black Temple now comes from **cosmophile's Black Temple guide**, which carries spell IDs
+and exact numbers as well as a full trash route. Those steps carry `source = "cosmophile"`.
+
+As with Hyjal, sourced is not verified. What remains open:
+
+- **NPC ids are not in the guide.** Every id in `Data/BlackTemple.lua` is still a guess,
+  and the trash route names mobs without ids at all. `/pprc scan` is the closer.
+- **Spell ids are the guide's own** and have not been checked against the client. They are
+  the first machine-checkable data in the repo, so a future `/pprc scan` extension could
+  verify them directly.
+
+One claim was *removed* rather than kept: Illidan's phase 5 Shadow Prison came from a web
+summary and the guide does not mention it. Weaker evidence loses to stronger.
 
 ## Data corrections
 
@@ -112,10 +126,10 @@ Paste those here as they are confirmed, then update the data files and flip the 
   99999   Some Trash Mob            NOT IN Data/ -> add to Data/Hyjal.lua
 ```
 
-Black Temple trash is the weakest area. Packs whose id is unknown deliberately carry no
-`npcIDs` at all rather than a guess — a wrong id surfaces the wrong card mid-pull, while
-an unkeyed pack simply means the RL clicks Next, which always works. **Fill those in from
-a real scan, not from memory.**
+The Black Temple trash route in `Data/BTTrash.lua` names its packs but carries no NPC ids
+at all — the guide lists mobs by name, not by id. That is deliberate: a wrong id surfaces
+the wrong card mid-pull, while an unkeyed pack simply means the RL reads the route and
+clicks Next, which always works. **Fill them in from a real scan, not from memory.**
 
 Buff names in `Data/Consumables.lua` are worth confirming too: a wrong name shows as a
 false negative on the readiness board. `/pprc scan` includes your own current buffs with

@@ -64,6 +64,31 @@ function RosterUI:Build()
         text = "Role is TANK / HEALER / DAMAGER only. Ranged versus melee does not exist in the API." })
     self.roleNote:SetPoint("TOPLEFT", listFrame, "BOTTOMLEFT", 0, -6)
 
+    -- Role slots from Data/Roles.lua. Clicking one assigns the selected
+    -- raider, exactly like clicking a position on the map -- same Assign call,
+    -- same ASSIGN sync. A role just has no coordinate.
+    self.roleHeading = W.Text(f, { color = "muted2", font = "GameFontNormalSmall", text = "ASSIGNMENTS" })
+    self.roleHeading:SetPoint("TOPLEFT", f, "TOPLEFT", PAD * 2 + LIST_W, -30)
+
+    self.roleRows = {}
+    for i = 1, MAX_ROWS do
+        local row = CreateFrame("Button", nil, f)
+        row:SetHeight(ROW_H)
+        row:SetPoint("TOPLEFT", f, "TOPLEFT", PAD * 2 + LIST_W, -46 - (i - 1) * ROW_H)
+        row:SetWidth(MAP_W)
+
+        row.label = W.Text(row, { color = "muted", font = "GameFontNormalSmall" })
+        row.label:SetPoint("LEFT", row, "LEFT", 0, 0)
+        row.who = W.Text(row, { color = "danger", font = "GameFontNormalSmall", justify = "RIGHT" })
+        row.who:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+
+        row:SetScript("OnClick", function(self_)
+            if self_._slotKey then RosterUI:OnSlotClick(self_._slotKey) end
+        end)
+        row:Hide()
+        self.roleRows[i] = row
+    end
+
     -- --- map ---------------------------------------------------------------
     self.map = PPRC.PosMap:Create(f, {
         interactive = true,
@@ -135,15 +160,36 @@ function RosterUI:CurrentLayoutKey()
     return encounter and encounter.posmap or nil
 end
 
-function RosterUI:Push()
-    local layoutKey = self:CurrentLayoutKey()
-    if not layoutKey then
-        PPRC:Print("no positioning diagram on this step - nothing to push")
-        return false
+-- What is unfilled right now, whether this encounter is driven by a diagram
+-- or by a role template. Several Black Temple fights have roles but no map --
+-- a Reliquary tank order is not a set of coordinates -- and those must still
+-- be pushable.
+function RosterUI:EmptySlots()
+    local assignments = PPRC.Roster:Assignments()
+
+    local roleSlots = PPRC.State.encounterID and PPRC:RoleSlots(PPRC.State.encounterID) or nil
+    if roleSlots and #roleSlots > 0 then
+        local empty = {}
+        for _, slot in ipairs(roleSlots) do
+            if not assignments[slot.key] then empty[#empty + 1] = slot.label end
+        end
+        return empty, true
     end
 
+    local layoutKey = self:CurrentLayoutKey()
+    if layoutKey then return PPRC.PosMap:EmptySlots(layoutKey, assignments), true end
+
+    return {}, false
+end
+
+function RosterUI:Push()
     local assignments = PPRC.Roster:Assignments()
-    local empty = PPRC.PosMap:EmptySlots(layoutKey, assignments)
+    local empty, haveSlots = self:EmptySlots()
+
+    if not haveSlots then
+        PPRC:Print("nothing to assign on this step - no diagram and no role template")
+        return false
+    end
 
     if #empty > 0 and not self._confirmPush then
         self._confirmPush = true
@@ -238,22 +284,54 @@ function RosterUI:Refresh()
     end
     self.list:Hide(math.min(#players, MAX_ROWS) + 1)
 
+    -- Role slots first: they exist for encounters with or without a diagram.
+    local roleSlots = PPRC.State.encounterID and PPRC:RoleSlots(PPRC.State.encounterID) or nil
+    local shownRoles = 0
+    if roleSlots then
+        local lastGroup
+        for i = 1, math.min(#roleSlots, MAX_ROWS) do
+            local slot = roleSlots[i]
+            local row = self.roleRows[i]
+            local prefix = (slot.group ~= lastGroup) and ("|cff8fe04b" .. slot.group .. "|r  ") or "  "
+            lastGroup = slot.group
+            row.label:SetText(prefix .. slot.label)
+            local who = assignments[slot.key]
+            row.who:SetText(who or "|cff6c7c6e- -|r")
+            row._slotKey = slot.key
+            row:Show()
+            shownRoles = i
+        end
+    end
+    for i = shownRoles + 1, MAX_ROWS do self.roleRows[i]:Hide() end
+    self.roleHeading:SetText(shownRoles > 0 and "ASSIGNMENTS" or "|cff6c7c6eno role template for this encounter|r")
+
     local layoutKey = self:CurrentLayoutKey()
-    if layoutKey then
+    -- The map and the role list share the same column, so only one shows.
+    -- Roles win when they exist: they cover every encounter, and a diagram
+    -- with no names on it says less than a filled-in assignment sheet.
+    if layoutKey and shownRoles == 0 then
         PPRC.PosMap:Render(self.map, layoutKey, { assignments = assignments })
         local layout = PPRC.PosMap:Layout(layoutKey)
         self.frame.title:SetText("ASSIGNMENTS - " .. string.upper(layout.name or layoutKey))
 
-        if not self._confirmPush then
-            local empty = PPRC.PosMap:EmptySlots(layoutKey, assignments)
-            self.footerNote:SetText(#empty > 0
-                and string.format("|cffcda23f%d position%s empty|r", #empty, #empty == 1 and "" or "s")
-                or "|cff3fae6fall positions filled|r")
-        end
     else
         self.map:Hide()
-        self.frame.title:SetText("ASSIGNMENTS")
-        self.footerNote:SetText("|cff6c7c6eno diagram for this step|r")
+        local encounter = PPRC.State:Encounter()
+        self.frame.title:SetText(encounter
+            and ("ASSIGNMENTS - " .. string.upper(encounter.name))
+            or "ASSIGNMENTS")
+    end
+
+    if not self._confirmPush then
+        local empty, haveSlots = self:EmptySlots()
+        if not haveSlots then
+            self.footerNote:SetText("|cff6c7c6enothing to assign on this step|r")
+        elseif #empty > 0 then
+            self.footerNote:SetText(string.format("|cffcda23f%d slot%s empty|r",
+                #empty, #empty == 1 and "" or "s"))
+        else
+            self.footerNote:SetText("|cff3fae6fall slots filled|r")
+        end
     end
 
     if self.selected then

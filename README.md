@@ -76,6 +76,8 @@ into a folder named exactly `PopperpigRaidCall`.
 | `/pprc board` | Call board |
 | `/pprc mobs` | Pack breakdown for the current wave — abilities, kicks, dispels, kill priority |
 | `/pprc rules` | Trash rules for the base you are on |
+| `/pprc route` | Black Temple trash route — numbered pulls, compositions, skips |
+| `/pprc wa` | WeakAura links for this encounter, plus the general packs |
 | `/pprc ready` | Readiness board |
 | `/pprc assign` | Assignment panel |
 | `/pprc brief` | Pre-pull briefing |
@@ -108,17 +110,16 @@ summary, so those steps carry `source = "jurdi"` and render clean. It is still n
 claim as "the game confirmed it", which is why `verified` stays false and `/pprc scan`
 remains the way to close that last gap.
 
-**Black Temple is still unbacked** and says so on every step. Its boss mechanics went
-through a research pass that found real errors — including an Illidan phase model that was
-structurally wrong — but that ran on search-engine summaries rather than primary sources.
-See [SPIKES.md](SPIKES.md) for the provenance and its limits.
+**Black Temple comes from [cosmophile's Black Temple guide](https://docs.google.com/spreadsheets/d/1eDvDJpABRg9CAW5fjvPgJkiLNojLgI5E62iynA5H5hY/edit)**
+— all nine encounters with **spell IDs and exact numbers**, the full trash route, the
+per-boss assignment template and the positioning diagrams. Those steps carry
+`source = "cosmophile"`.
 
-NPC ids are unconfirmed everywhere, including Hyjal: they are not in the cheat sheet.
+Both raids are now sourced, so the `unverified` tag should not appear in normal play. If
+you see it, that step came from nowhere and wants checking.
 
-Black Temple trash ids are the least confident of all. Packs whose id could not be stood
-behind carry **no** npcIDs rather than a plausible-looking guess: an unkeyed pack means
-the RL clicks Next, which always works, while a wrong id would surface the wrong card
-mid-pull.
+NPC ids remain unconfirmed everywhere: neither guide lists them. That is the single
+highest-value thing `/pprc scan` can close.
 
 `/pprc scan` is the correction path. It prints the raw world-state returns and every NPC
 id seen with its creature name, flagging the ones missing from `Data/`. One clear night
@@ -215,10 +216,15 @@ Fewer taint surfaces, nothing to fetch, and every line is covered by the suite.
 
 ## Credits
 
-Mount Hyjal wave data, boss numbers and positioning come from **Jurdi's Mount Hyjal Cheat
-Sheet** — [twitch.tv/jurdijd](https://www.twitch.tv/jurdijd),
-[YouTube guide](https://www.youtube.com/watch?v=v7CgKFX45iw). Used with credit; the
-strategies are his work, not ours.
+**Mount Hyjal** — wave data, boss numbers and positioning from **Jurdi's Mount Hyjal Cheat
+Sheet**: [twitch.tv/jurdijd](https://www.twitch.tv/jurdijd),
+[YouTube guide](https://www.youtube.com/watch?v=v7CgKFX45iw).
+
+**Black Temple** — encounters, abilities, spell IDs, trash route and assignment templates
+from **cosmophile's Black Temple guide**.
+
+Used with credit. The strategies are theirs, not ours — this addon just puts them on
+screen at the moment they are needed.
 
 ## Licence
 
