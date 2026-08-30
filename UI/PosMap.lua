@@ -21,6 +21,7 @@ PPRC.PosMap  = PosMap
 local ICON_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local INSET        = 34    -- room for the landmark labels around the room
 local MARK_SIZE    = 18
+local ZONE_DOTS    = 28    -- dots that make up a radius ring
 
 -- The icon sheet is a 4x4 grid; indices run 1..8 across the first two rows.
 function PosMap:MarkCoords(index)
@@ -81,6 +82,8 @@ function PosMap:Create(parent, opts)
     map.bossLabel = W.Text(room, { color = "text", font = "GameFontNormalSmall", justify = "CENTER" })
 
     map.slots = {}
+    map.zoneDots = {}
+    map.zoneLabels = {}
     map.note  = W.Text(map, { color = "muted", font = "GameFontNormalSmall", justify = "CENTER" })
     map.note:SetPoint("BOTTOMLEFT", map, "BOTTOMLEFT", 6, 4)
     map.note:SetPoint("BOTTOMRIGHT", map, "BOTTOMRIGHT", -6, 4)
@@ -132,6 +135,66 @@ function PosMap:SlotWidget(map, index)
 end
 
 -- ---------------------------------------------------------------------------
+-- Radius rings
+--
+-- Drawn as a ring of small dots rather than a circle texture: no art to ship,
+-- no power-of-two constraint, and it scales with the frame. The radius is
+-- computed off the room's SMALLER dimension so a wide panel still yields a
+-- circle rather than an ellipse -- a stretched "30 yard" ring would misinform.
+-- ---------------------------------------------------------------------------
+
+function PosMap:DrawZones(map, zones)
+    local room = map.room
+    local width  = room:GetWidth() or 300
+    local height = room:GetHeight() or 200
+    local scale  = math.min(width, height)
+
+    local dotIndex, labelIndex = 1, 1
+
+    for _, zone in ipairs(zones or {}) do
+        local radius = (zone.r or 0.25) * scale
+        local cx = (zone.cx or 0.5) * width
+        local cy = (zone.cy or 0.5) * height
+
+        for i = 1, ZONE_DOTS do
+            local dot = map.zoneDots[dotIndex]
+            if not dot then
+                dot = room:CreateTexture(nil, "BACKGROUND")
+                dot:SetSize(2, 2)
+                map.zoneDots[dotIndex] = dot
+            end
+
+            local angle = (i / ZONE_DOTS) * math.pi * 2
+            dot:ClearAllPoints()
+            dot:SetPoint("CENTER", room, "BOTTOMLEFT",
+                cx + math.cos(angle) * radius,
+                cy + math.sin(angle) * radius)
+            W.Paint(dot, zone.color or "danger", 0.75)
+            dot:Show()
+            dotIndex = dotIndex + 1
+        end
+
+        if zone.label then
+            local label = map.zoneLabels[labelIndex]
+            if not label then
+                label = W.Text(room, { color = "danger", font = "GameFontNormalSmall", justify = "CENTER" })
+                map.zoneLabels[labelIndex] = label
+            end
+            label:ClearAllPoints()
+            -- Sat on the ring's top edge, where it labels the boundary rather
+            -- than colliding with whoever is standing in the middle.
+            label:SetPoint("CENTER", room, "BOTTOMLEFT", cx, cy + radius + 8)
+            label:SetText(zone.label)
+            label:Show()
+            labelIndex = labelIndex + 1
+        end
+    end
+
+    for i = dotIndex, #map.zoneDots do map.zoneDots[i]:Hide() end
+    for i = labelIndex, #map.zoneLabels do map.zoneLabels[i]:Hide() end
+end
+
+-- ---------------------------------------------------------------------------
 -- Render
 --
 -- opts.assignments  slot id -> player name
@@ -169,6 +232,8 @@ function PosMap:Render(map, layoutKey, opts)
         map.boss:Hide()
         map.bossLabel:SetText("")
     end
+
+    self:DrawZones(map, layout.zones)
 
     local assignments = opts.assignments or {}
     local me = opts.mine and PPRC.Adapter:StripRealm(opts.mine) or nil

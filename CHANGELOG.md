@@ -7,6 +7,37 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Mount Hyjal rebuilt from a real raid-leader source
+
+All 32 waves now carry their **exact compositions** from
+[Jurdi's Mount Hyjal Cheat Sheet](https://www.twitch.tv/jurdijd), replacing compositions
+that had been authored from recall and were largely wrong. Fel Hounds, Felstalkers,
+Infernals and Crypt Fiends appear in the waves and had been missing entirely.
+
+- **New pack panel** (`/pprc mobs`) — the mobs in the current wave with their abilities,
+  kick and dispel flags and kill priority, sorted priority-first. `/pprc rules` prints the
+  trash rules for the base you are on, including the Mind Control trick that drops combat
+  without triggering the next wave.
+- **Positioning diagrams rebuilt** from the sheet's screenshots, and they can now draw a
+  labelled radius ring — Azgalor's 30-yard Rain of Fire circle and Kaz'rogal's 12-yard War
+  Stomp radius, which are the two fights where "am I inside or outside" *is* the mechanic.
+- **Provenance is now three-state.** `verified` still means the live client confirmed it;
+  `source` means a cited document does. The HUD's `unverified` tag fires only when a step
+  has neither, so Hyjal renders clean and Black Temple still flags. `/pprc debug` reports
+  the split.
+
+Boss corrections the sheet forced: Anetheron's **Vampiric Aura** (he heals 300% of melee
+damage taken — healing debuffs are mandatory) was missing entirely, and Carrion Swarm cuts
+healing by 75% rather than "halving" it; his Infernals are **not tauntable**. Kaz'rogal's
+Malevolent Cleave is **23,000 split across targets and needs three tanks stacked** — the
+old text told melee to stand behind him and dropped the requirement. Azgalor's Rain of Fire
+**leaves a DoT that keeps ticking after you leave the fire**, which the sheet names as the
+wipe cause. Archimonde's **Soul Charge** was absent: every death hits the raid for 4500 plus
+a class-dependent effect.
+
+It also corrected one of my own corrections — I had moved the 20-yard figure off Frost Nova
+onto Death and Decay. Both are 20 yards. There is now a test for it.
+
 ### Fixed — read this one first
 
 - **Kaz'rogal: the mana call was backwards.** The call board said *"SPEND YOUR MANA"* and
@@ -38,9 +69,9 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Still unverified
 
-Wave-by-wave compositions across all 32 Hyjal waves remain unconfirmed and are pending a
-raid-leader source. The mob roster is known to be incomplete — Crypt Fiends, Deathknights,
-Shades, Felguards and Infernals all appear in the waves and are missing from the data.
+NPC ids everywhere, including Hyjal — they are not in the cheat sheet, and `/pprc scan`
+during a live clear is the way to close that. Black Temple has no cited source at all and
+flags every step accordingly.
 
 ---
 

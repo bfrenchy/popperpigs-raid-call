@@ -74,6 +74,8 @@ into a folder named exactly `PopperpigRaidCall`.
 | `/pprc stop` | Leave test mode |
 | `/pprc next` · `/pprc back` | Advance or rewind a step |
 | `/pprc board` | Call board |
+| `/pprc mobs` | Pack breakdown for the current wave — abilities, kicks, dispels, kill priority |
+| `/pprc rules` | Trash rules for the base you are on |
 | `/pprc ready` | Readiness board |
 | `/pprc assign` | Assignment panel |
 | `/pprc brief` | Pre-pull briefing |
@@ -91,20 +93,27 @@ into a folder named exactly `PopperpigRaidCall`.
 
 ## About the data
 
-**Everything in `Data/` currently ships as `verified = false`.** The wave compositions,
-NPC ids and spell details were authored from knowledge, not read off a live 2.5.6 client.
-They are the best available information and the HUD renders them normally — with an
-`unverified` tag in the corner, so nothing on screen is mistaken for settled fact.
+Data carries its provenance, in three states:
 
-Boss mechanics have since been through a research pass that found real errors, including a
-Kaz'rogal call that was exactly backwards and would have wiped raids. Those are corrected.
-But that pass ran on search-engine summaries rather than primary sources — see
-[SPIKES.md](SPIKES.md) for the provenance and its limits. Confirmed in game still beats
-confirmed by search.
+| State | Means | HUD |
+| --- | --- | --- |
+| `verified = true` | Confirmed against the live 2.5.6 client | clean |
+| `source = "..."` | A cited document says so | clean |
+| neither | Authored from knowledge, unbacked | `unverified` tag |
 
-**Wave-by-wave compositions are the weakest area and are still open.** The mob roster is
-known to be incomplete: Crypt Fiends, Deathknights, Shades, Felguards and Infernals all
-appear in the waves and are absent from the data.
+**Mount Hyjal comes from [Jurdi's Mount Hyjal Cheat Sheet](https://www.twitch.tv/jurdijd)**
+— all 32 waves at exact mob counts, per-mob abilities, boss numbers and the positioning
+diagrams, transcribed with credit. That is a raid-tested document rather than a guide
+summary, so those steps carry `source = "jurdi"` and render clean. It is still not the same
+claim as "the game confirmed it", which is why `verified` stays false and `/pprc scan`
+remains the way to close that last gap.
+
+**Black Temple is still unbacked** and says so on every step. Its boss mechanics went
+through a research pass that found real errors — including an Illidan phase model that was
+structurally wrong — but that ran on search-engine summaries rather than primary sources.
+See [SPIKES.md](SPIKES.md) for the provenance and its limits.
+
+NPC ids are unconfirmed everywhere, including Hyjal: they are not in the cheat sheet.
 
 Black Temple trash ids are the least confident of all. Packs whose id could not be stood
 behind carry **no** npcIDs rather than a plausible-looking guess: an unkeyed pack means
@@ -203,6 +212,13 @@ distinction survives all the way down to the adapter.
 Fewer taint surfaces, nothing to fetch, and every line is covered by the suite.
 
 ---
+
+## Credits
+
+Mount Hyjal wave data, boss numbers and positioning come from **Jurdi's Mount Hyjal Cheat
+Sheet** — [twitch.tv/jurdijd](https://www.twitch.tv/jurdijd),
+[YouTube guide](https://www.youtube.com/watch?v=v7CgKFX45iw). Used with credit; the
+strategies are his work, not ours.
 
 ## Licence
 

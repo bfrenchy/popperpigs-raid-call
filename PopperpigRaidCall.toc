@@ -24,6 +24,7 @@ Core\StateMachine.lua
 # Pure tables, zero logic. NPC IDs and wave compositions live ONLY here, so a
 # patch fix is a data edit that can ship the same night.
 Data\Consumables.lua
+Data\Mobs.lua
 Data\Calls.lua
 Data\Positions.lua
 Data\Hyjal.lua
@@ -41,6 +42,7 @@ UI\PosMap.lua
 UI\HUD.lua
 UI\CallBoard.lua
 UI\Readiness.lua
+UI\MobPanel.lua
 UI\Roster.lua
 UI\Briefing.lua
 UI\Options.lua

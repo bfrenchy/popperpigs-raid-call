@@ -82,6 +82,22 @@ Then delete the branch that turned out to be dead — with evidence, not a guess
 
 ---
 
+## Mount Hyjal — sourced, August 2026
+
+Hyjal wave compositions, boss ability numbers and positioning now come from **Jurdi's Mount
+Hyjal Cheat Sheet** (twitch.tv/jurdijd), supplied by the raid leader. Those steps carry
+`source = "jurdi"` rather than being unbacked.
+
+That is a real upgrade over search summaries, but it is still **not** live-client
+confirmation, so `verified` stays false. Two things remain open even for Hyjal:
+
+- **NPC ids are not in the sheet.** Every id in `Data/Hyjal.lua` is still a guess. This is
+  the single highest-value thing `/pprc scan` can close.
+- **Wave-to-worldstate mapping is unconfirmed.** The compositions are known; whether the
+  counter reports wave number or enemies remaining is still S2.
+
+Black Temple has no equivalent source and remains unbacked throughout.
+
 ## Data corrections
 
 Everything in `Data/` ships as `verified = false`. `/pprc scan` prints every NPC id seen

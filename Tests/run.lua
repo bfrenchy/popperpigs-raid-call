@@ -434,12 +434,21 @@ local function suiteState(profile, opts)
         end)
     end)
 
-    it("counts unverified data so drift is visible", function()
+    it("splits data provenance three ways so drift stays visible", function()
         scenario(opts, function(addon)
             local hyjal = addon.Instances.hyjal
             truthy(hyjal.total > 0, "steps counted")
-            -- Every Hyjal step ships unverified until confirmed against 2.5.6.
-            eq(hyjal.unverified, hyjal.total, "all steps flagged unverified")
+
+            -- Hyjal now comes from Jurdi's cheat sheet: sourced, but still not
+            -- confirmed against the live client. Those are different claims and
+            -- the registry keeps them apart.
+            eq(hyjal.sourced, hyjal.total, "every Hyjal step is sourced")
+            eq(hyjal.unverified, 0, "none left unbacked")
+            eq(hyjal.verified, 0, "and none claims live-client confirmation")
+
+            -- Black Temple has had no such source, and still says so.
+            local bt = addon.Instances.blacktemple
+            eq(bt.unverified, bt.total, "Black Temple remains unbacked")
         end)
     end)
 
@@ -488,7 +497,7 @@ local function suiteState(profile, opts)
 
             truthy(State:GoToWave(6, "detect"), "jumped to wave 6")
             eq(State:Current().id, "wave6", "correct step")
-            eq(State:Current().detail, "Frost Wyrms", "correct data")
+            eq(State:Current().detail, "6 Ghouls, 2 Abominations, 4 Shadowy Necromancers", "correct data")
 
             -- Waves restart per encounter, so 9 is meaningless here.
             falsy(State:GoToWave(9, "detect"), "unknown wave refused")
@@ -579,20 +588,27 @@ local function suiteHUD(profile, opts)
             addon.HUD:Refresh()
 
             eq(addon.HUD.nowTitle:GetText(), "Wave 1", "NOW title")
-            eq(addon.HUD.nowDetail:GetText(), "Ghouls", "NOW detail")
+            eq(addon.HUD.nowDetail:GetText(), "10 Ghouls", "NOW detail")
             truthy(addon.HUD.nowCall:GetText():find("Ghouls only", 1, true), "spoken call rendered")
             truthy(addon.HUD.nextTitle:GetText():find("Wave 2", 1, true), "NEXT title")
         end)
     end)
 
-    it("marks a step whose data is not yet confirmed", function()
+    it("flags a step backed by nothing, and only that", function()
         scenario(opts, function(addon)
-            -- Every Hyjal step currently ships unverified.
+            -- Black Temple still has no cited source.
+            addon.State:StartTest("bt_najentus")
+            addon.HUD:Refresh()
+            eq(addon.HUD.unverifiedTag:GetText(), "unverified", "flagged when unbacked")
+
+            -- Hyjal comes from a real raid-leader sheet, so it renders clean.
+            -- Tagging sourced data would train people to ignore the tag.
             addon.State:StartTest("hyjal_winterchill")
             addon.HUD:Refresh()
-            eq(addon.HUD.unverifiedTag:GetText(), "unverified", "flagged on unverified data")
+            eq(addon.HUD.unverifiedTag:GetText(), "", "no tag on sourced data")
 
-            -- And clears once a step is confirmed, so the tag means something.
+            -- And live-client confirmation clears it too.
+            addon.State:StartTest("bt_najentus")
             addon.State:Current().verified = true
             addon.HUD:Refresh()
             eq(addon.HUD.unverifiedTag:GetText(), "", "no tag on confirmed data")
@@ -734,7 +750,9 @@ local function suiteCommands(profile, opts)
             addon.Commands:Run("debug")
             local blob = table.concat(env.printed, "\n")
             truthy(blob:find("world state", 1, true), "capability table printed")
-            truthy(blob:find("unverified", 1, true), "unverified data count printed")
+            truthy(blob:find("verified", 1, true) and blob:find("sourced", 1, true)
+                and blob:find("unbacked", 1, true), "provenance split printed")
+            truthy(blob:find("Jurdi", 1, true), "and the source is credited")
             truthy(addon.debugEnabled, "debug toggled on")
         end)
     end)
@@ -864,8 +882,9 @@ local function suiteCallBoard(profile, opts)
             addon.CallBoard:Refresh()
 
             eq(addon.CallBoard.stepButtons[1]._label:GetText(), "FAP NOW", "first step call")
-            eq(addon.CallBoard.stepButtons[2]._label:GetText(), "OT PEEL", "second step call")
-            falsy(addon.CallBoard.stepButtons[3]:IsShown(), "unused buttons hidden")
+            eq(addon.CallBoard.stepButtons[2]._label:GetText(), "MAX 2 PER TANK", "second step call")
+            eq(addon.CallBoard.stepButtons[3]._label:GetText(), "PEEL 3 ABOMS OUT", "third step call")
+            falsy(addon.CallBoard.stepButtons[4]:IsShown(), "unused buttons hidden")
         end)
     end)
 
@@ -2446,6 +2465,300 @@ local function suiteOptions(profile, opts)
     end)
 end
 
+local function suiteJurdi(profile, opts)
+    group("Hyjal / cheat sheet [" .. profile .. "]")
+
+    local function waveSteps(addon)
+        local out = {}
+        for _, encounterID in ipairs(addon.Instances.hyjal.order) do
+            for _, step in ipairs(addon:GetEncounter(encounterID).steps) do
+                if step.wave then out[#out + 1] = step end
+            end
+        end
+        return out
+    end
+
+    it("carries all 32 waves with a real composition and a cited source", function()
+        scenario(opts, function(addon)
+            local waves = waveSteps(addon)
+            eq(#waves, 32, "wave count")
+
+            for _, step in ipairs(waves) do
+                local where = step.encounterID .. "/" .. step.id
+                truthy(step.detail and #step.detail > 0, where .. " has a composition")
+                -- Every composition names a count, which is the thing the old
+                -- invented data could not do.
+                truthy(step.detail:find("%d"), where .. " composition has counts: " .. tostring(step.detail))
+                eq(step.source, "jurdi", where .. " cites its source")
+                truthy(step.mobs and #step.mobs > 0, where .. " names its mobs")
+            end
+        end)
+    end)
+
+    it("names only mobs that exist in the reference", function()
+        scenario(opts, function(addon)
+            for _, step in ipairs(waveSteps(addon)) do
+                for _, id in ipairs(step.mobs) do
+                    truthy(addon.Mobs[id],
+                        step.encounterID .. "/" .. step.id .. " names unknown mob '" .. id .. "'")
+                end
+            end
+        end)
+    end)
+
+    -- Spot-checks straight off the sheet. If someone "tidies" these, the diff
+    -- should fail rather than quietly drift back toward invention.
+    it("matches the sheet on specific waves", function()
+        scenario(opts, function(addon)
+            local function detail(encounterID, waveID)
+                for _, step in ipairs(addon:GetEncounter(encounterID).steps) do
+                    if step.id == waveID then return step.detail end
+                end
+            end
+
+            eq(detail("hyjal_winterchill", "wave1"), "10 Ghouls", "Winterchill 1")
+            eq(detail("hyjal_winterchill", "wave6"), "6 Ghouls, 6 Abominations", "Winterchill 6")
+            eq(detail("hyjal_kazrogal", "wave2"), "4 Ghouls, 10 Gargoyles", "Kaz'rogal 2")
+            eq(detail("hyjal_kazrogal", "wave6"), "8 Gargoyles, 1 Frostwyrm", "Kaz'rogal 6")
+            eq(detail("hyjal_azgalor", "wave4"), "8 Infernals, 6 Fel Hounds", "Azgalor 4")
+            eq(detail("hyjal_azgalor", "wave1"), "6 Abominations, 6 Shadowy Necromancers", "Azgalor 1")
+        end)
+    end)
+
+    it("includes the mob types the invented data missed entirely", function()
+        scenario(opts, function(addon)
+            local seen = {}
+            for _, step in ipairs(waveSteps(addon)) do
+                for _, id in ipairs(step.mobs) do seen[id] = true end
+            end
+            -- None of these appeared anywhere before the sheet arrived.
+            truthy(seen.fel_hound, "Fel Hounds present")
+            truthy(seen.felstalker, "Felstalkers present")
+            truthy(seen.infernal, "Infernals present")
+            truthy(seen.crypt_fiend, "Crypt Fiends present")
+        end)
+    end)
+
+    it("carries the wave-specific callouts that are the point of the sheet", function()
+        scenario(opts, function(addon)
+            local function step(encounterID, waveID)
+                for _, s in ipairs(addon:GetEncounter(encounterID).steps) do
+                    if s.id == waveID then return s end
+                end
+            end
+
+            -- Kaz'rogal 6: gargoyles spawn left, LoS at the tower, spread for the wyrm.
+            local k6 = step("hyjal_kazrogal", "wave6")
+            truthy(k6.call:find("LEFT", 1, true), "names the spawn side")
+            truthy(k6.call:lower():find("tower", 1, true), "names the LoS point")
+
+            -- Winterchill 6: peel Aboms off the raid for the poison.
+            local w6 = step("hyjal_winterchill", "wave6")
+            truthy(w6.call:lower():find("away from the raid", 1, true), "the abom peel")
+
+            -- Azgalor 4: one infernal spawns far out.
+            local a4 = step("hyjal_azgalor", "wave4")
+            truthy(a4.call:lower():find("far out", 1, true), "the far spawn warning")
+        end)
+    end)
+
+    it("keeps the per-mob kick and dispel flags usable", function()
+        scenario(opts, function(addon)
+            local necro = addon.Mobs.shadowy_necromancer
+            eq(necro.priority, "high", "necros are a priority target")
+
+            local byName = {}
+            for _, a in ipairs(necro.abilities) do byName[a.name] = a end
+            truthy(byName["Shadowbolt"].kick, "shadowbolt is kickable")
+            truthy(byName["Unholy Frenzy"].dispel, "unholy frenzy is dispellable")
+
+            truthy(addon.Mobs.banshee.abilities[1].dispel, "banshee curse is dispellable")
+            eq(addon.Mobs.abomination.priority, "high", "aboms are a priority target")
+        end)
+    end)
+
+    it("keeps the trash rules for both bases", function()
+        scenario(opts, function(addon)
+            local alliance = table.concat(addon.MobRules.alliance, " ")
+            local horde = table.concat(addon.MobRules.horde, " ")
+
+            truthy(alliance:find("2-3 Abominations", 1, true), "the abom cap")
+            truthy(alliance:find("Mind Control", 1, true), "the necro combat-drop trick")
+            truthy(horde:find("parallel", 1, true), "the horde spawn behaviour")
+            truthy(horde:find("bug", 1, true), "the wave 1 spawn bug")
+        end)
+    end)
+
+    -- The corrections the sheet forced, pinned so they cannot regress.
+    it("keeps 20 yards on BOTH Frost Nova and Death and Decay", function()
+        scenario(opts, function(addon)
+            local brief
+            for _, step in ipairs(addon:GetEncounter("hyjal_winterchill").steps) do
+                if step.id == "boss" then brief = step.brief end
+            end
+            local byName = {}
+            for _, entry in ipairs(brief) do byName[entry.spell] = entry.text end
+
+            -- I moved this figure off Frost Nova in an earlier pass. Both are
+            -- 20 yards; the sheet is explicit about it.
+            truthy(byName["Frost Nova"]:find("20 yards", 1, true), "Frost Nova radius")
+            truthy(byName["Death and Decay"]:find("20 yard", 1, true), "D&D radius")
+        end)
+    end)
+
+    it("names Anetheron's Vampiric Aura and the 75% healing cut", function()
+        scenario(opts, function(addon)
+            local text = ""
+            for _, step in ipairs(addon:GetEncounter("hyjal_anetheron").steps) do
+                if step.id == "boss" then
+                    text = step.call
+                    for _, e in ipairs(step.brief) do text = text .. " " .. e.spell .. " " .. e.text end
+                end
+            end
+            truthy(text:find("Vampiric Aura", 1, true), "the healing-debuff requirement")
+            truthy(text:find("300%", 1, true), "how much he heals")
+            truthy(text:find("75%", 1, true), "the healing reduction, not 'halves'")
+            truthy(text:find("NOT TAUNTABLE", 1, true), "infernals cannot be taunted")
+        end)
+    end)
+
+    it("keeps Kaz'rogal's tanks stacked for the split cleave", function()
+        scenario(opts, function(addon)
+            local step
+            for _, s in ipairs(addon:GetEncounter("hyjal_kazrogal").steps) do
+                if s.id == "boss" then step = s end
+            end
+            local text = step.call .. " " .. table.concat(step.warn, " ")
+            for _, e in ipairs(step.brief) do text = text .. " " .. e.text end
+
+            truthy(text:find("23,000", 1, true), "the split cleave damage")
+            truthy(text:lower():find("stack", 1, true), "tanks stack")
+            truthy(text:find("12 yards", 1, true), "the War Stomp radius")
+            -- The old text told melee to stand behind him, which drops the
+            -- three-tank soak entirely.
+            falsy(step.call:lower():find("stay behind him", 1, true), "no stale melee-behind advice")
+        end)
+    end)
+
+    it("warns that Azgalor's Rain of Fire DoT follows you out", function()
+        scenario(opts, function(addon)
+            local text = ""
+            for _, s in ipairs(addon:GetEncounter("hyjal_azgalor").steps) do
+                if s.id == "boss" then
+                    text = s.call
+                    for _, e in ipairs(s.brief) do text = text .. " " .. e.text end
+                end
+            end
+            truthy(text:find("30 yards", 1, true), "the range that avoids it entirely")
+            truthy(text:upper():find("KEEPS TICKING", 1, true), "the persistent DoT, named as the wipe cause")
+            truthy(text:lower():find("soulstone", 1, true), "soulstone the doom targets")
+        end)
+    end)
+
+    it("carries Archimonde's Soul Charge with its per-class effects", function()
+        scenario(opts, function(addon)
+            local text = ""
+            for _, s in ipairs(addon:GetEncounter("hyjal_archimonde").steps) do
+                if s.id == "fight" then
+                    for _, e in ipairs(s.brief) do text = text .. " " .. e.spell .. " " .. e.text end
+                end
+            end
+            truthy(text:find("Soul Charge", 1, true), "named")
+            truthy(text:find("4500", 1, true), "the raid damage per death")
+            truthy(text:find("silence", 1, true), "caster death effect")
+            truthy(text:find("50% increased damage taken", 1, true), "physical death effect")
+            truthy(text:find("2250 mana", 1, true), "hybrid death effect")
+
+            local checklist = table.concat(addon:GetEncounter("hyjal_archimonde").checklist, " ")
+            truthy(checklist:find("Tyrande", 1, true), "Tears come from Tyrande specifically")
+        end)
+    end)
+end
+
+local function suiteMobPanel(profile, opts)
+    group("MobPanel [" .. profile .. "]")
+
+    it("lists the pack for the current wave, priority first", function()
+        scenario(opts, function(addon)
+            addon.State:StartTest("hyjal_winterchill")
+            addon.State:GoToStep(7, "local")   -- 4 Ghouls, 4 Necros, 4 Aboms
+            addon.MobPanel:Show()
+
+            local body = ""
+            for _, line in ipairs(addon.MobPanel.lines) do body = body .. "\n" .. (line:GetText() or "") end
+
+            truthy(body:find("4 Ghouls, 4 Shadowy Necromancers, 4 Abominations", 1, true), "composition shown")
+            truthy(body:find("Shadowy Necromancer", 1, true), "necros listed")
+            truthy(body:find("[kick]", 1, true), "kick flags rendered")
+
+            -- High priority mobs sort above normal ones: that ordering is the
+            -- kill order, so it has to be right.
+            local necro = body:find("Shadowy Necromancer", 1, true)
+            local ghoul = body:find("! Ghoul", 1, true) or body:find("  Ghoul", 1, true)
+            truthy(necro < ghoul, "priority targets listed first")
+        end)
+    end)
+
+    it("says so plainly on a step with no pack", function()
+        scenario(opts, function(addon)
+            addon.State:StartTest("hyjal_winterchill")
+            addon.State:GoToStep(9, "local")   -- the boss
+            addon.MobPanel:Show()
+            eq(addon.MobPanel.lines[1]:GetText(), "No mob breakdown for this step.", "explained")
+        end)
+    end)
+
+    it("prints the rules for the base you are on", function()
+        scenario(opts, function(addon, env)
+            addon.State:StartTest("hyjal_kazrogal")
+            addon.MobPanel:PrintRules()
+            local out = table.concat(env.printed, "\n")
+            truthy(out:find("Horde base", 1, true), "picked the horde rules")
+            truthy(out:find("parallel", 1, true), "and printed them")
+
+            addon.State:StartTest("hyjal_winterchill")
+            addon.MobPanel:PrintRules()
+            out = table.concat(env.printed, "\n")
+            truthy(out:find("Alliance base", 1, true), "picks alliance on that side")
+        end)
+    end)
+end
+
+local function suiteZones(profile, opts)
+    group("PosMap zones [" .. profile .. "]")
+
+    it("draws the Rain of Fire ring the sheet draws", function()
+        scenario(opts, function(addon)
+            local azgalor = addon.PosMap:Layout("azgalor")
+            truthy(azgalor.zones, "azgalor has a zone")
+            eq(azgalor.zones[1].label, "30 yd Rain of Fire", "labelled")
+
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            addon.PosMap:Render(map, "azgalor", {})
+            truthy(#map.zoneDots > 0, "ring rendered")
+            truthy(map.zoneLabels[1]:GetText():find("30 yd", 1, true), "label rendered")
+        end)
+    end)
+
+    it("hides the ring on a layout that has none", function()
+        scenario(opts, function(addon)
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            addon.PosMap:Render(map, "azgalor", {})
+            addon.PosMap:Render(map, "winterchill", {})
+            for _, dot in ipairs(map.zoneDots) do falsy(dot:IsShown(), "dots hidden") end
+        end)
+    end)
+
+    it("puts all three tanks on one Kaz'rogal slot", function()
+        scenario(opts, function(addon)
+            local kazrogal = addon.PosMap:Layout("kazrogal")
+            truthy(kazrogal.slotsByID.tanks, "a single stacked tank slot")
+            truthy(kazrogal.slotsByID.tanks.where:lower():find("stacked", 1, true), "says stacked")
+            truthy(kazrogal.zones[1].label:find("12 yd", 1, true), "stomp radius drawn")
+        end)
+    end)
+end
+
 -- ===========================================================================
 -- Run every suite under both client profiles
 -- ===========================================================================
@@ -2471,6 +2784,9 @@ for _, profile in ipairs(PROFILES) do
     suitePosMap(profile.name, profile.opts)
     suiteRosterUI(profile.name, profile.opts)
     suiteBriefing(profile.name, profile.opts)
+    suiteJurdi(profile.name, profile.opts)
+    suiteMobPanel(profile.name, profile.opts)
+    suiteZones(profile.name, profile.opts)
     suiteBlackTemple(profile.name, profile.opts)
     suiteOptions(profile.name, profile.opts)
     suiteRateLimit(profile.name, profile.opts)

@@ -283,7 +283,7 @@ PPRC.defaults = {
     localEcho   = false,
 
     -- Panels the user has chosen to keep open between sessions.
-    shown       = { hud = true, callboard = true, readiness = false, roster = false },
+    shown       = { hud = true, callboard = true, readiness = false, roster = false, mobs = false },
 
     -- Assignments persist by character name across weeks (plan §10).
     assignments = {},

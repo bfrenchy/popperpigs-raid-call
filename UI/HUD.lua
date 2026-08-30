@@ -165,10 +165,12 @@ function HUD:Refresh()
     end
 
     -- Body -------------------------------------------------------------------
-    -- verified == false means the composition or ids on this step were
-    -- authored rather than read off a live client. nil means the step never
-    -- made a factual claim worth flagging.
-    self.unverifiedTag:SetText((step and step.verified == false) and "unverified" or "")
+    -- Flag only a step backed by nothing at all. `verified` means the live
+    -- client confirmed it; `source` means a cited document does. Tagging a
+    -- step that came out of a real raid leader's cheat sheet would train
+    -- people to ignore the tag, which costs more than it gains.
+    local unbacked = step and step.verified ~= true and not step.source
+    self.unverifiedTag:SetText(unbacked and "unverified" or "")
 
     if not step then
         self.nowTitle:SetText("No encounter loaded")

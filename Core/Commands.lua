@@ -62,6 +62,14 @@ register("say", "/pprc say <text>", "Send one line through the throttle, as a ra
     PPRC.RateLimit:SendCall(text)
 end)
 
+register("mobs", "/pprc mobs", "Show or hide the pack breakdown for the current wave.", function()
+    if PPRC.MobPanel then PPRC.MobPanel:Toggle() end
+end)
+
+register("rules", "/pprc rules", "Print the trash rules for the base you are on.", function()
+    if PPRC.MobPanel then PPRC.MobPanel:PrintRules() end
+end)
+
 register("ready", "/pprc ready", "Show or hide the readiness board.", function()
     if PPRC.Readiness then PPRC.Readiness:Toggle() end
 end)
@@ -148,11 +156,13 @@ register("debug", "/pprc debug", "Toggle debug logging and print the capability 
         for _, line in ipairs(PPRC.Detect:TierReport()) do PPRC:Print(line) end
     end
 
-    -- How much of the loaded data is still unconfirmed against this client.
+    -- Provenance of the loaded data, three ways: confirmed against this
+    -- client, backed by a cited source, or backed by nothing.
     local instance = PPRC.State.instance
     if instance then
-        PPRC:Print("data: %s has %d steps, |cffcda23f%d unverified|r",
-            instance.id, instance.total, instance.unverified)
+        PPRC:Print("data: %s has %d steps - |cff3fae6f%d verified|r, |cff5fb0c9%d sourced|r, |cffcda23f%d unbacked|r",
+            instance.id, instance.total, instance.verified, instance.sourced, instance.unverified)
+        if instance.credit then PPRC:Print("  |cff6c7c6e%s|r", instance.credit) end
     end
 
     PPRC:Print("debug logging %s", PPRC.debugEnabled and "|cff3fae6fon|r" or "|cffc1544aoff|r")

@@ -37,6 +37,8 @@ function PPRC:RegisterInstance(def)
 
     def.byNPC = {}
     def.unverified = 0
+    def.sourced = 0
+    def.verified = 0
     def.total = 0
 
     for _, encounterID in ipairs(def.order or {}) do
@@ -58,7 +60,17 @@ function PPRC:RegisterInstance(def)
                 step.encounterID = encounterID
 
                 def.total = def.total + 1
-                if step.verified == false then def.unverified = def.unverified + 1 end
+                -- Three states, not two. `verified` means the live client
+                -- confirmed it. `source` means a cited document says so, which
+                -- is weaker but far from a guess. A step with neither is the
+                -- only kind the HUD flags.
+                if step.verified == true then
+                    def.verified = def.verified + 1
+                elseif step.source then
+                    def.sourced = def.sourced + 1
+                else
+                    def.unverified = def.unverified + 1
+                end
 
                 -- A step may key off one id or several (a mixed trash pack).
                 if step.npcID then
@@ -78,7 +90,8 @@ function PPRC:RegisterInstance(def)
     self.Instances[def.id] = def
     if def.mapID then self.InstancesByMap[def.mapID] = def end
 
-    self:Log("registered %s: %d steps, %d unverified", def.id, def.total, def.unverified)
+    self:Log("registered %s: %d steps (%d verified, %d sourced, %d unverified)",
+        def.id, def.total, def.verified, def.sourced, def.unverified)
 end
 
 function PPRC:GetEncounter(id) return self.Encounters[id] end
