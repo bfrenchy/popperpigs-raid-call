@@ -38,16 +38,26 @@ scripts/install.sh "/path/to/AddOns"  # explicit target
 
 `--link` is the one to use while developing: edit in the repo, `/reload` in game.
 
-**Where the AddOns folder is.** TBC Anniversary runs out of the `_classic_` flavour
-directory. `_classic_era_` is Classic Era, a different client — installing there means
-the addon never appears and nothing explains why.
+**Where the AddOns folder is.** The Anniversary client runs out of the `_anniversary_`
+flavour directory:
 
-- Windows — `C:\Program Files (x86)\World of Warcraft\_classic_\Interface\AddOns\`
-- macOS — `/Applications/World of Warcraft/_classic_/Interface/AddOns/`
+- macOS — `/Applications/World of Warcraft/_anniversary_/Interface/AddOns/`
+- Windows — `C:\Program Files (x86)\World of Warcraft\_anniversary_\Interface\AddOns\`
 
-If your launcher shows a different flavour for Anniversary, use whichever it actually
-launches. To install by hand, copy `PopperpigRaidCall.toc`, `Core/`, `Data/` and `UI/`
-into a folder named exactly `PopperpigRaidCall`.
+Some installs use `_classic_` instead, and the script falls back to it. **`_classic_era_`
+is Classic Era, a different client** — installing there means the addon never appears and
+nothing explains why, so the script deliberately never picks it. Use whichever flavour
+your launcher actually launches.
+
+If auto-detection misses (WoW on another drive, a custom install path), pass the folder:
+
+```bash
+scripts/install.sh "/path/to/World of Warcraft/_anniversary_/Interface/AddOns"
+```
+
+To install by hand, copy `PopperpigRaidCall.toc`, `Core/`, `Data/` and `UI/` into a folder
+named exactly `PopperpigRaidCall`. On Windows without Git Bash or WSL, hand-copying is the
+route — the script is bash.
 
 ### Smoke test, in order
 

@@ -40,25 +40,37 @@ done
 # ---------------------------------------------------------------------------
 # Find the AddOns folder
 #
-# TBC Anniversary runs out of the _classic_ flavour directory. _classic_era_ is
-# Classic Era, which is a different client -- installing there means the addon
-# never shows up and nothing explains why.
+# The Anniversary client installs to the _anniversary_ flavour directory, which
+# is what this addon targets and so what we look for first. Some installs put
+# a TBC-era client under _classic_ instead, so that is checked as a fallback.
+#
+# _classic_era_ is deliberately NOT probed: that is Classic Era, a different
+# client. Installing there means the addon never shows up and nothing explains
+# why, which is a worse outcome than failing to auto-detect.
+#
+# Roots x flavours rather than a hand-written list of full paths, so adding a
+# flavour or an install root is a one-line change instead of five.
 # ---------------------------------------------------------------------------
 
+FLAVOURS=("_anniversary_" "_classic_")
+ROOTS=(
+  "/Applications/World of Warcraft"
+  "$HOME/Applications/World of Warcraft"
+  "/c/Program Files (x86)/World of Warcraft"
+  "/mnt/c/Program Files (x86)/World of Warcraft"
+  "$HOME/.wine/drive_c/Program Files (x86)/World of Warcraft"
+)
+
 if [ -z "$TARGET" ]; then
-  CANDIDATES=(
-    "/Applications/World of Warcraft/_classic_/Interface/AddOns"
-    "$HOME/Applications/World of Warcraft/_classic_/Interface/AddOns"
-    "/c/Program Files (x86)/World of Warcraft/_classic_/Interface/AddOns"
-    "/mnt/c/Program Files (x86)/World of Warcraft/_classic_/Interface/AddOns"
-    "$HOME/.wine/drive_c/Program Files (x86)/World of Warcraft/_classic_/Interface/AddOns"
-  )
-  for candidate in "${CANDIDATES[@]}"; do
-    if [ -d "$candidate" ]; then
-      TARGET="$candidate"
-      echo "Found AddOns folder: $TARGET"
-      break
-    fi
+  for flavour in "${FLAVOURS[@]}"; do
+    for root in "${ROOTS[@]}"; do
+      candidate="$root/$flavour/Interface/AddOns"
+      if [ -d "$candidate" ]; then
+        TARGET="$candidate"
+        echo "Found AddOns folder ($flavour): $TARGET"
+        break 2
+      fi
+    done
   done
 fi
 
@@ -67,13 +79,13 @@ if [ -z "$TARGET" ]; then
 Could not find your AddOns folder.
 
 Pass it explicitly:
-    scripts/install.sh "/path/to/World of Warcraft/_classic_/Interface/AddOns"
+    scripts/install.sh "/path/to/World of Warcraft/_anniversary_/Interface/AddOns"
 
 or set WOW_ADDONS_DIR.
 
-TBC Anniversary lives under the _classic_ flavour directory. If your launcher
-shows a different one for Anniversary, use whichever it actually launches --
-_classic_era_ is Classic Era and is the wrong client.
+The Anniversary client lives under the _anniversary_ flavour directory; some
+installs use _classic_ instead. Use whichever one your launcher actually
+launches -- _classic_era_ is Classic Era and is the wrong client.
 MSG
   exit 1
 fi

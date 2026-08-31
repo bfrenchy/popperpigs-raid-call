@@ -7,6 +7,19 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — the installer looked in the wrong folder
+
+`scripts/install.sh` only ever probed the `_classic_` flavour directory, but the
+Anniversary client installs to **`_anniversary_`**. Auto-detection therefore failed on a
+normal Anniversary install, and the README pointed at the wrong path too, so following it
+by hand put the addon somewhere the client never reads.
+
+Detection is now generated from roots × flavours rather than a hand-written list of full
+paths, with `_anniversary_` tried first and `_classic_` kept as a fallback. It prints
+which flavour it matched. `_classic_era_` is still deliberately never picked — that is
+Classic Era, a different client, and silently installing there is worse than failing to
+detect.
+
 ### Black Temple rebuilt from cosmophile's guide
 
 All nine encounters rewritten with **spell IDs and exact numbers**, plus the complete
