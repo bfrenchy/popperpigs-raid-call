@@ -291,6 +291,10 @@ PPRC.defaults = {
     -- Manual checklist ticks for things the API cannot read (plan §9).
     checklist   = {},
 
+    -- Guide screenshots off by default: the drawn diagram is the one that
+    -- carries live assignment names, and that is the everyday view.
+    showGuide   = false,
+
     minimap     = { hide = false, angle = 200 },
     hudScale    = 1.0,
     debug       = false,

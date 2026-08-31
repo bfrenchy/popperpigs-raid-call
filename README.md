@@ -69,8 +69,8 @@ It enumerates every fixed drive rather than assuming `C:`, so a WoW install on `
 is found without being told. `-Link` makes a directory junction instead of copying (no
 admin rights needed), and `-Target "path"` skips detection.
 
-To install by hand on any platform, copy `PopperpigRaidCall.toc`, `Core/`, `Data/` and
-`UI/` into a folder named exactly `PopperpigRaidCall`.
+To install by hand on any platform, copy `PopperpigRaidCall.toc`, `Core/`, `Data/`, `UI/`
+and `Textures/` into a folder named exactly `PopperpigRaidCall`.
 
 ### Smoke test, in order
 
@@ -104,6 +104,7 @@ To install by hand on any platform, copy `PopperpigRaidCall.toc`, `Core/`, `Data
 | `/pprc ready` | Readiness board |
 | `/pprc assign` | Assignment panel |
 | `/pprc brief` | Pre-pull briefing |
+| **GUIDE** button | On any diagram: swap to the guide's own screenshot and back |
 | `/pprc config` | Settings, including the profile export string |
 | `/pprc echo` | Local echo — nothing reaches the raid |
 | `/pprc say <text>` | One line through the throttle |
@@ -218,6 +219,7 @@ Core/Roster.lua         group, roles, readiness, assignments
 Core/Comm.lua           sync and the receive-side permission gate
 Data/                   pure tables, zero logic
 UI/                     plain frames, no secure templates, cannot taint
+Textures/               the guides' own screenshots, as TGA -- see CREDITS.txt
 ```
 
 2.5.6 backported Midnight-era nameplate and raid-frame code and broke a lot of addons on

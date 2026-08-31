@@ -52,6 +52,7 @@ PPRC.Layouts = {
 
     winterchill = {
         name = "Rage Winterchill",
+        texture = "winterchill",
         note = "Hunter misdirect and drag him to the ballista. Spread wide -- Death and Decay is nearly invisible.",
         landmarks = {
             { side = "top",    label = "JAINA - NORTH" },
@@ -71,6 +72,7 @@ PPRC.Layouts = {
 
     anetheron = {
         name = "Anetheron",
+        texture = "anetheron",
         note = "Infernals are NOT tauntable. Offtank stands clear and picks them up at range; targeted players run toward them, not onto them.",
         landmarks = {
             { side = "top",    label = "INFERNAL CORNER" },
@@ -91,6 +93,7 @@ PPRC.Layouts = {
 
     kazrogal = {
         name = "Kaz'rogal",
+        texture = "kazrogal",
         note = "Tanks STACKED to split Malevolent Cleave. Every ranged past 12 yards or War Stomp catches them.",
         landmarks = {
             { side = "top",    label = "THRALL - HORDE ARMY" },
@@ -114,6 +117,7 @@ PPRC.Layouts = {
 
     azgalor = {
         name = "Azgalor",
+        texture = "azgalor",
         note = "Ranged outside 30 yards never get touched by Rain of Fire. The DoT keeps ticking after you leave the fire -- that is what wipes raids.",
         landmarks = {
             { side = "top",    label = "THRALL - HORDE ARMY" },
@@ -138,6 +142,7 @@ PPRC.Layouts = {
 
     archimonde = {
         name = "Archimonde",
+        texture = "archimonde",
         note = "MT in the middle. Four or five loose groups around him, each with a decurser and a shaman. Fight ends at 10%.",
         landmarks = {
             { side = "top",    label = "NORDRASSIL" },
@@ -172,6 +177,7 @@ PPRC.Layouts = {
 
     najentus = {
         name = "High Warlord Naj'entus",
+        texture = "najentus",
         note = "Spread 6 yards for Needle Spine. Buddy system: somebody else clicks your spine, and that raider holds it.",
         landmarks = {
             { side = "top",    label = "HIS PLATFORM" },
@@ -192,6 +198,7 @@ PPRC.Layouts = {
 
     supremus = {
         name = "Supremus",
+        texture = "supremus",
         note = "Phase 1 he is tanked at the top of the room. Phase 2 he chases one player -- run the lap, do not cut corners, and stop DPS before he turns back.",
         landmarks = {
             { side = "top",    label = "BACK WALL" },
@@ -212,6 +219,7 @@ PPRC.Layouts = {
 
     akama = {
         name = "Shade of Akama",
+        texture = "akama",
         note = "A tank on each doorway. Sorcerers CANNOT be tanked -- burn them. Frost Traps and Earthbind at the side doors so the add tanks can kite.",
         landmarks = {
             { side = "top",    label = "CHANNELER PLATFORM" },
@@ -234,6 +242,7 @@ PPRC.Layouts = {
     -- corners. Ghosts run to whichever is theirs; the constructs spawn there.
     teron = {
         name = "Teron Gorefiend",
+        texture = "teron",
         note = "Shadow of Death targets run UP THE STAIRS to their spot before they die. Constructs spawn where the body drops -- keep them off the raid.",
         landmarks = {
             { side = "top",    label = "TOP OF THE STAIRS" },
@@ -259,6 +268,7 @@ PPRC.Layouts = {
     -- circle: three groups of five on one side of it, one crossing to soak.
     bloodboil = {
         name = "Gurtogg Bloodboil",
+        texture = "bloodboil",
         note = "Blood Boil hits the 5 FURTHEST players. Three groups of five; one crosses the line to soak, then moves up and the next group falls back.",
         landmarks = {
             { side = "top",    label = "NORTH WALL" },
@@ -286,6 +296,7 @@ PPRC.Layouts = {
     -- take turns stepping in. The red ring is that "closest" band.
     reliquary = {
         name = "Reliquary of Souls",
+        texture = "reliquary",
         note = "Phase 1 has NO threat table and healing is impossible -- the active tank simply stands closest and the others step back. Phase 2 reflects damage.",
         landmarks = {
             { side = "top",    label = "THE RELIQUARY" },
@@ -311,6 +322,7 @@ PPRC.Layouts = {
     -- immune to Fatal Attraction, which is why the stack exists at all.
     shahraz = {
         name = "Mother Shahraz",
+        texture = "shahraz",
         note = "Melee under the statue's hand, ranged and healers under the fish statue. Tanks stack for Saber Lash -- they do NOT need shadow resistance.",
         landmarks = {
             { side = "top",    label = "FISH STATUE" },
@@ -331,6 +343,7 @@ PPRC.Layouts = {
     -- together so it can be cleaved.
     council = {
         name = "Illidari Council",
+        texture = "council",
         note = "Zerevor is tanked by a MAGE in the far corner -- Arcane Explosion hits anything in melee range. Gathios, Malande and Veras get piled together for cleave.",
         landmarks = {
             { side = "top",    label = "THEIR DAIS" },
@@ -358,6 +371,7 @@ PPRC.Layouts = {
 
     illidan = {
         name = "Illidan - phase 1",
+        texture = "illidan",
         note = "Melee stay out of the front: Draw Soul heals him 100k. Tank walks him a little after every Flame Crash. Parasite target runs to the north pocket.",
         landmarks = {
             { side = "top",    label = "NORTH POCKET" },
@@ -380,6 +394,7 @@ PPRC.Layouts = {
 
     illidan_p2 = {
         name = "Illidan - phase 2, Flames of Azzinoth",
+        texture = "illidan_p2",
         note = "Kite the Flames on the arcs and keep them pointed away. NEVER let a Flame get 25 yards from its glaive. Dodge the Eye Blast as it is being drawn.",
         landmarks = {
             { side = "top",    label = "NORTH" },
@@ -405,6 +420,7 @@ PPRC.Layouts = {
 
     illidan_p3 = {
         name = "Illidan - phase 3",
+        texture = "illidan_p3",
         note = "Largely a repeat of phase 1, but everyone spreads 5 yards for Agonizing Flames. Parasites go to a named drop point -- pre-trap them.",
         landmarks = {
             { side = "top",    label = "NORTH DROP" },
@@ -428,6 +444,7 @@ PPRC.Layouts = {
 
     illidan_p4 = {
         name = "Illidan - phase 4, demon form",
+        texture = "illidan_p4",
         note = "Warlock tank takes him 20 yards clear -- Shadow Blast splashes that far. Melee back off: Aura of Dread is 15 yards. Focus the Shadow Demons instantly.",
         landmarks = {
             { side = "top",    label = "HE LIFTS OFF HERE" },
@@ -450,6 +467,7 @@ PPRC.Layouts = {
 
     illidan_p5 = {
         name = "Illidan - phase 5, Maiev",
+        texture = "illidan_p5",
         note = "Repeat of phase 3 until the enrage 40 seconds in. Call the region when a trap lands; the MT kites him into it and the enrage drops.",
         landmarks = {
             { side = "top",    label = "NORTH" },

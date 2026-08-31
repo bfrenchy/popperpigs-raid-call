@@ -21,6 +21,7 @@ PPRC.PosMap  = PosMap
 local ICON_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local INSET        = 34    -- room for the landmark labels around the room
 local MARK_SIZE    = 18
+local TEXTURE_PATH = "Interface\\AddOns\\PopperpigRaidCall\\Textures\\"
 local ZONE_DOTS    = 28    -- dots that make up a radius ring
 local LINE_DOTS    = 22    -- dots that make up a drawn line
 
@@ -91,10 +92,69 @@ function PosMap:Create(parent, opts)
     map.note:SetPoint("BOTTOMLEFT", map, "BOTTOMLEFT", 6, 4)
     map.note:SetPoint("BOTTOMRIGHT", map, "BOTTOMRIGHT", -6, 4)
 
+    -- The guide screenshot, drawn behind everything and off by default. The
+    -- drawn diagram is the one that carries live assignment names, so this
+    -- switches between two views rather than replacing one with the other.
+    map.guide = room:CreateTexture(nil, "BACKGROUND")
+    map.guide:SetAllPoints(room)
+    map.guide:Hide()
+
+    map.guideBtn = W.Button(map, {
+        text = "GUIDE", width = 54, height = 16, font = "GameFontNormalSmall",
+        tooltip = "Swap between the drawn diagram and the guide screenshot.",
+        onClick = function() PosMap:ToggleGuide(map) end,
+    })
+    map.guideBtn:SetPoint("TOPLEFT", map, "TOPLEFT", 6, -4)
+    map.guideBtn:Hide()
+
     map._onSlotClick = opts.onSlotClick
     map._interactive = opts.interactive and true or false
 
     return map
+end
+
+-- ---------------------------------------------------------------------------
+-- Guide screenshots
+--
+-- WoW cannot fetch an image over the network and does not read PNG or JPG, so
+-- these ship as local TGAs under Textures/. A missing or unreadable file is a
+-- branch, not an error: the button simply never appears and the drawn diagram
+-- carries on, which is the same habit as Core/Adapter.lua.
+-- ---------------------------------------------------------------------------
+
+function PosMap:ToggleGuide(map)
+    map.guideMode = not map.guideMode
+    PPRC.db.showGuide = map.guideMode
+    if map._layoutKey then self:Render(map, map._layoutKey, map._opts) end
+end
+
+function PosMap:ApplyGuide(map, layout)
+    local hasTexture = layout.texture and true or false
+    local showing    = hasTexture and map.guideMode and true or false
+
+    if hasTexture then
+        map.guideBtn:Show()
+        map.guideBtn:SetLabel(showing and "DIAGRAM" or "GUIDE")
+    else
+        map.guideBtn:Hide()
+    end
+
+    if showing then
+        -- pcall because a corrupt or absent TGA must not take the panel down
+        -- mid-pull; falling back to the diagram always works.
+        local ok = pcall(map.guide.SetTexture, map.guide, TEXTURE_PATH .. layout.texture .. ".tga")
+        if not ok then
+            PPRC:Log("guide texture failed to load for %s", tostring(layout.texture))
+            map.guideMode = false
+            map.guide:Hide()
+            return false
+        end
+        map.guide:Show()
+        return true
+    end
+
+    map.guide:Hide()
+    return false
 end
 
 -- Place a child at normalised room coordinates. y is bottom-up.
@@ -275,6 +335,12 @@ function PosMap:Render(map, layoutKey, opts)
     end
     map:Show()
 
+    map._opts = opts
+    if map.guideMode == nil then
+        map.guideMode = PPRC.db and PPRC.db.showGuide or false
+    end
+    local guiding = self:ApplyGuide(map, layout)
+
     for _, side in ipairs({ "top", "bottom", "left", "right" }) do
         map.landmarks[side]:SetText("")
     end
@@ -283,10 +349,12 @@ function PosMap:Render(map, layoutKey, opts)
         if text then text:SetText(landmark.label) end
     end
 
-    map.note:SetText(layout.note or "")
+    map.note:SetText(guiding
+        and ((layout.note or "") .. "  |cff6c7c6e[guide image - DIAGRAM shows assignments]|r")
+        or (layout.note or ""))
 
     local room = map.room
-    if layout.boss then
+    if layout.boss and not guiding then
         anchor(map.boss, room, layout.boss.x, layout.boss.y)
         map.boss:Show()
         map.bossLabel:SetText(layout.boss.label or "")
@@ -297,13 +365,20 @@ function PosMap:Render(map, layoutKey, opts)
         map.bossLabel:SetText("")
     end
 
-    self:DrawZones(map, layout.zones)
-    self:DrawLines(map, layout.lines)
+    -- NOT `guiding and nil or layout.zones`: nil is falsy, so that idiom always
+    -- yields the right-hand side and the rings would draw over the screenshot.
+    if guiding then
+        self:DrawZones(map, nil)
+        self:DrawLines(map, nil)
+    else
+        self:DrawZones(map, layout.zones)
+        self:DrawLines(map, layout.lines)
+    end
 
     local assignments = opts.assignments or {}
     local me = opts.mine and PPRC.Adapter:StripRealm(opts.mine) or nil
 
-    for i, slotDef in ipairs(layout.slots or {}) do
+    for i, slotDef in ipairs(guiding and {} or (layout.slots or {})) do
         local slot = self:SlotWidget(map, i)
         slot._slotID = slotDef.id
 
@@ -340,7 +415,7 @@ function PosMap:Render(map, layoutKey, opts)
         slot:Show()
     end
 
-    for i = #(layout.slots or {}) + 1, #map.slots do
+    for i = (guiding and 1 or #(layout.slots or {}) + 1), #map.slots do
         map.slots[i]:Hide()
         map.slots[i].label:SetText("")
         map.slots[i].who:SetText("")

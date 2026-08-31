@@ -7,6 +7,27 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### The guides' own diagrams now ship with the addon
+
+Every positioning diagram has a **GUIDE** button that swaps the drawn map for the
+screenshot it was traced from — Jurdi's for Hyjal, cosmophile's for Black Temple, all 18,
+converted to TGA under `Textures/`.
+
+It is a swap, not a replacement, and the drawn diagram stays the default. Only the drawn
+view can put **live assignment names on the slots** — "Vexmoor — Flame tank WEST" — because
+it is generated, and a screenshot is a picture. The traced coordinates are also an
+*interpretation* of those images rather than being pixel-registered to them, so the two
+are never drawn at once; the note line says which view you are looking at.
+
+Worth knowing before you update: **this takes the addon from ~250 KB to ~14 MB.** WoW
+cannot fetch an image over the network and does not read PNG or JPG, so there is no
+lighter route — art has to ship as a local power-of-two TGA. Delete `Textures/` and
+everything still works: the button disappears and the drawn diagrams carry on, which is
+also the fallback if a file is ever unreadable.
+
+The screenshots are Jurdi's and cosmophile's, redistributed with credit. See
+`Textures/CREDITS.txt`.
+
 ### Fixed — the installer looked in the wrong folder
 
 `scripts/install.sh` only ever probed the `_classic_` flavour directory, but the

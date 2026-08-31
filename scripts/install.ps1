@@ -38,7 +38,7 @@ $ErrorActionPreference = 'Stop'
 $AddonName = 'PopperpigRaidCall'
 
 # Exactly what the game loads. Tests, scripts and CI stay out, matching .pkgmeta.
-$Shipped  = @('PopperpigRaidCall.toc', 'Core', 'Data', 'UI')
+$Shipped  = @('PopperpigRaidCall.toc', 'Core', 'Data', 'UI', 'Textures')
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
 # ---------------------------------------------------------------------------

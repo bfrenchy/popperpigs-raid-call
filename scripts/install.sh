@@ -21,7 +21,7 @@ ADDON_NAME="PopperpigRaidCall"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Exactly what the game loads. Tests, scripts and CI stay out, matching .pkgmeta.
-SHIPPED=("PopperpigRaidCall.toc" "Core" "Data" "UI")
+SHIPPED=("PopperpigRaidCall.toc" "Core" "Data" "UI" "Textures")
 
 LINK=0
 TARGET="${WOW_ADDONS_DIR:-}"

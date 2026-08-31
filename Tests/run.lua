@@ -3112,6 +3112,85 @@ local function suiteBTLayouts(profile, opts)
     end)
 end
 
+local function suiteGuideTextures(profile, opts)
+    group("Guide textures [" .. profile .. "]")
+
+    it("names a texture for every layout", function()
+        scenario(opts, function(addon)
+            for key, layout in pairs(addon.Layouts) do
+                truthy(layout.texture, key .. " has a guide texture")
+                eq(layout.texture, key, key .. " texture matches its layout key")
+            end
+        end)
+    end)
+
+    it("starts on the drawn diagram, not the screenshot", function()
+        scenario(opts, function(addon)
+            -- The drawn view is the one carrying live assignment names, so it
+            -- is the everyday default.
+            falsy(addon.db.showGuide, "guide off by default")
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            addon.PosMap:Render(map, "azgalor", {})
+            falsy(map.guide:IsShown(), "screenshot hidden")
+            truthy(map.slots[1]:IsShown(), "slots drawn")
+        end)
+    end)
+
+    it("swaps to the screenshot and back, and remembers the choice", function()
+        scenario(opts, function(addon)
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            addon.PosMap:Render(map, "azgalor", {})
+
+            addon.PosMap:ToggleGuide(map)
+            truthy(map.guide:IsShown(), "screenshot shown")
+            truthy(addon.db.showGuide, "choice persisted")
+            eq(map.guideBtn._label:GetText(), "DIAGRAM", "button offers the way back")
+
+            -- Our traced coordinates are an interpretation of these images, not
+            -- pixel-registered to them, so drawing both at once would put two
+            -- different pictures of the same room in one frame.
+            for _, slot in ipairs(map.slots) do falsy(slot:IsShown(), "slots hidden") end
+            falsy(map.boss:IsShown(), "boss marker hidden")
+            for _, dot in ipairs(map.zoneDots) do falsy(dot:IsShown(), "rings hidden") end
+
+            addon.PosMap:ToggleGuide(map)
+            falsy(map.guide:IsShown(), "back to the diagram")
+            truthy(map.slots[1]:IsShown(), "slots drawn again")
+        end)
+    end)
+
+    it("says which view is on screen", function()
+        scenario(opts, function(addon)
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            addon.PosMap:Render(map, "azgalor", {})
+            addon.PosMap:ToggleGuide(map)
+            truthy(map.note:GetText():find("guide image", 1, true),
+                "the note names the view, so a picture is not mistaken for the chart")
+        end)
+    end)
+
+    it("falls back to the diagram when the texture will not load", function()
+        scenario(opts, function(addon)
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            -- A corrupt or absent TGA must not take the panel down mid-pull.
+            map.guide.SetTexture = function() error("no such file") end
+            addon.db.showGuide = true
+            truthy(addon.PosMap:Render(map, "azgalor", {}), "still renders")
+            falsy(map.guide:IsShown(), "screenshot abandoned")
+            truthy(map.slots[1]:IsShown(), "diagram carried on")
+        end)
+    end)
+
+    it("hides the button for a layout with no screenshot", function()
+        scenario(opts, function(addon)
+            addon.Layouts.fx_bare = { name = "Bare", slots = {}, slotsByID = {} }
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            addon.PosMap:Render(map, "fx_bare", {})
+            falsy(map.guideBtn:IsShown(), "no button without a texture")
+        end)
+    end)
+end
+
 local function suiteRoute(profile, opts)
     group("BT route [" .. profile .. "]")
 
@@ -3309,6 +3388,7 @@ for _, profile in ipairs(PROFILES) do
     suiteZones(profile.name, profile.opts)
     suiteBlackTemple(profile.name, profile.opts)
     suiteBTLayouts(profile.name, profile.opts)
+    suiteGuideTextures(profile.name, profile.opts)
     suiteRoute(profile.name, profile.opts)
     suiteRoles(profile.name, profile.opts)
     suiteWeakAuras(profile.name, profile.opts)

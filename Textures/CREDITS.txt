@@ -1,0 +1,36 @@
+Popperpig Raid Call — guide screenshots
+=======================================
+
+The .tga files in this folder are NOT original artwork. They are the
+positioning diagrams from two community raid guides, converted to a format the
+WoW client can load, and shipped here with credit.
+
+    Mount Hyjal
+        winterchill.tga   anetheron.tga   kazrogal.tga
+        azgalor.tga       archimonde.tga
+
+        From Jurdi's Mount Hyjal Cheat Sheet.
+        https://www.twitch.tv/jurdijd
+        https://www.youtube.com/watch?v=v7CgKFX45iw
+
+    Black Temple
+        najentus.tga    supremus.tga    akama.tga      teron.tga
+        bloodboil.tga   reliquary.tga   shahraz.tga    council.tga
+        illidan.tga     illidan_p2.tga  illidan_p3.tga
+        illidan_p4.tga  illidan_p5.tga
+
+        From cosmophile's Black Temple guide.
+
+The strategies and the screenshots are theirs. This addon only puts them on
+screen at the moment they are needed. If either author would rather these were
+not redistributed, remove this folder and the addon keeps working — the drawn
+diagrams in Data/Positions.lua are the default view and do not depend on any
+of these files.
+
+Regenerate with:
+
+    python3 scripts/build-textures.py --hyjal <dir> --bt <dir>
+
+512x512, uncompressed 24-bit TGA. Power-of-two because the client requires it;
+uncompressed because WoW's support for RLE-encoded TGA is not dependable, and a
+texture that silently fails to load is worse than a larger file.
