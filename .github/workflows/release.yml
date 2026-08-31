@@ -1,0 +1,46 @@
+name: Release
+
+# Tagging is what publishes. Nothing here runs on a normal push.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package and publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The packager reads git history to build release notes, so a
+          # shallow clone gives it nothing to work with.
+          fetch-depth: 0
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+
+      # A tag must never ship code the suite rejects. Re-run rather than
+      # trusting that CI passed on the commit this tag happens to point at.
+      - name: Verify before publishing
+        run: |
+          find . -name '*.lua' -print0 | xargs -0 -n1 luac5.1 -p
+          lua5.1 Tests/run.lua
+
+      # Builds the zip from .pkgmeta, substitutes @project-version@ in the
+      # .toc, attaches it to a GitHub Release, and uploads to CurseForge.
+      #
+      # CF_API_KEY is optional: without it the CurseForge upload is skipped and
+      # the GitHub Release still publishes, which is what gives testers a
+      # download link while the CurseForge project is still awaiting approval.
+      - name: Package and upload
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}

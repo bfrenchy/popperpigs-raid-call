@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    name: Syntax + test suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.1
+
+      # Catches anything that would throw on load in the client, which is the
+      # failure mode that costs a raid night rather than a minute.
+      - name: Syntax check every Lua file
+        run: find . -name '*.lua' -print0 | xargs -0 -n1 luac5.1 -p
+
+      # The suite runs itself twice internally: once against a modern API
+      # surface and once with it stripped to the legacy globals.
+      - name: Test suite
+        run: lua5.1 Tests/run.lua
+
+      # Every file the client is told to load must actually exist. A .toc
+      # naming a missing file is a silent partial load in game.
+      - name: Verify the .toc matches the tree
+        run: |
+          status=0
+          while read -r line; do
+            case "$line" in \#*|"") continue ;; esac
+            case "$line" in *.lua) ;; *) continue ;; esac
+            path="${line//\\//}"
+            if [ ! -f "$path" ]; then
+              echo "::error::.toc lists a file that does not exist: $path"
+              status=1
+            fi
+          done < PopperpigRaidCall.toc
+          exit $status

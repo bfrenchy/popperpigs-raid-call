@@ -1,0 +1,20 @@
+package-as: PopperpigRaidCall
+
+# No external libraries: Ace3 and LibDeflate are deliberately not used, so
+# there is nothing to fetch and no nolib build to create.
+enable-nolib-creation: no
+
+# Keep the release zip to exactly what the game loads.
+ignore:
+  - Tests
+  - scripts
+  - .github
+  - .gitignore
+  - .pkgmeta
+  - README.md
+  - CHANGELOG.md
+  - SPIKES.md
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown

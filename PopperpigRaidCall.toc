@@ -1,0 +1,54 @@
+## Interface: 20506
+## Title: Popperpig Raid Call
+## Notes: Raid-leader command surface for Mount Hyjal and Black Temple.|nOwns the twenty minutes around the fight, not the three minutes in it.
+## Author: bfrenchy
+## Version: @project-version@
+## SavedVariables: PopperpigRaidCallDB
+## X-License: MIT
+## X-Category: Raid Frames
+## DefaultState: Enabled
+
+# Set this once the CurseForge project exists (see README, "Publishing to CurseForge"):
+# ## X-Curse-Project-ID: 000000
+
+# --- Core ---------------------------------------------------------------
+# Init must load first: it owns the namespace, the event bus and the DB.
+# Adapter must load second: every module below it probes capabilities through it.
+Core\Init.lua
+Core\Adapter.lua
+Core\Codec.lua
+Core\RateLimit.lua
+Core\StateMachine.lua
+
+# --- Data ---------------------------------------------------------------
+# Pure tables, zero logic. NPC IDs and wave compositions live ONLY here, so a
+# patch fix is a data edit that can ship the same night.
+Data\Consumables.lua
+Data\Mobs.lua
+Data\Calls.lua
+Data\Positions.lua
+Data\Hyjal.lua
+Data\BlackTemple.lua
+Data\BTTrash.lua
+Data\Roles.lua
+Data\WeakAuras.lua
+
+# --- Core that consumes Data --------------------------------------------
+Core\Detect.lua
+Core\Roster.lua
+Core\Comm.lua
+
+# --- UI -----------------------------------------------------------------
+# All plain CreateFrame("Frame"). No secure templates, so none of this can taint.
+UI\Widgets.lua
+UI\PosMap.lua
+UI\HUD.lua
+UI\CallBoard.lua
+UI\Readiness.lua
+UI\MobPanel.lua
+UI\Roster.lua
+UI\Briefing.lua
+UI\Options.lua
+
+# --- Commands last: it wires every module above into /pprc ---------------
+Core\Commands.lua
