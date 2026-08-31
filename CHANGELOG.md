@@ -24,6 +24,19 @@ so the `unverified` tag should not appear in normal play.
   diagram are now pushable; previously a push was refused for lack of a map.
 - `brief` entries carry **`spellID`** — the first machine-checkable game data in the repo.
 
+- **Positioning diagrams rebuilt** from the guide's own screenshots, so every Black Temple
+  encounter now has a map — Bloodboil, Reliquary and the Council were naming layouts that
+  did not exist, which rendered as a blank panel with no error. Akama gained one.
+  **Illidan gets a layout per phase**: phase 2 is a kiting pattern, phase 4 is a 20-yard
+  exclusion zone, and calling either off the phase 1 picture would put people in the wrong
+  place. There is now a test that every `posmap` named anywhere resolves.
+- Diagrams can draw a **line** as well as a ring — Gurtogg's soak line, which the three
+  ranged groups rotate across, and the Eye Blast trail cutting through Illidan's phase 2.
+- Two shapes I had invented lost to the guide: Teron had **four corners** where the guide
+  draws **two drop points** at the top of the stairs, and Shahraz had four scatter spots
+  where the guide has **two named stacks** (melee under the statue's hand, ranged under
+  the fish statue).
+
 Corrections the guide forced, roughly by cost:
 
 - **Supremus**: it is **Hateful Strike (41926)**, not "Hurtful", and it hits whoever has

@@ -22,6 +22,7 @@ local ICON_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local INSET        = 34    -- room for the landmark labels around the room
 local MARK_SIZE    = 18
 local ZONE_DOTS    = 28    -- dots that make up a radius ring
+local LINE_DOTS    = 22    -- dots that make up a drawn line
 
 -- The icon sheet is a 4x4 grid; indices run 1..8 across the first two rows.
 function PosMap:MarkCoords(index)
@@ -84,6 +85,8 @@ function PosMap:Create(parent, opts)
     map.slots = {}
     map.zoneDots = {}
     map.zoneLabels = {}
+    map.lineDots = {}
+    map.lineLabels = {}
     map.note  = W.Text(map, { color = "muted", font = "GameFontNormalSmall", justify = "CENTER" })
     map.note:SetPoint("BOTTOMLEFT", map, "BOTTOMLEFT", 6, 4)
     map.note:SetPoint("BOTTOMRIGHT", map, "BOTTOMRIGHT", -6, 4)
@@ -195,6 +198,67 @@ function PosMap:DrawZones(map, zones)
 end
 
 -- ---------------------------------------------------------------------------
+-- Lines
+--
+-- Some rooms are divided rather than circled. Gurtogg's diagram draws a single
+-- red line down the middle -- the soak group crosses it and the previous group
+-- comes back -- and Illidan's phase 2 draws the Eye Blast as a diagonal streak.
+-- A ring cannot say either of those things, so a line is its own primitive.
+--
+-- Dots again rather than a stretched texture: a rotated line needs SetRotation
+-- or a shader, and a row of dots reads as "do not stand here" more clearly
+-- than a solid bar would anyway.
+-- ---------------------------------------------------------------------------
+
+function PosMap:DrawLines(map, lines)
+    local room = map.room
+    local width  = room:GetWidth() or 300
+    local height = room:GetHeight() or 200
+
+    local dotIndex, labelIndex = 1, 1
+
+    for _, line in ipairs(lines or {}) do
+        local x1, y1 = (line.x1 or 0) * width, (line.y1 or 0) * height
+        local x2, y2 = (line.x2 or 0) * width, (line.y2 or 0) * height
+
+        for i = 0, LINE_DOTS do
+            local dot = map.lineDots[dotIndex]
+            if not dot then
+                dot = room:CreateTexture(nil, "BACKGROUND")
+                dot:SetSize(2, 2)
+                map.lineDots[dotIndex] = dot
+            end
+
+            local t = i / LINE_DOTS
+            dot:ClearAllPoints()
+            dot:SetPoint("CENTER", room, "BOTTOMLEFT",
+                x1 + (x2 - x1) * t,
+                y1 + (y2 - y1) * t)
+            W.Paint(dot, line.color or "danger", 0.75)
+            dot:Show()
+            dotIndex = dotIndex + 1
+        end
+
+        if line.label then
+            local label = map.lineLabels[labelIndex]
+            if not label then
+                label = W.Text(room, { color = "danger", font = "GameFontNormalSmall", justify = "CENTER" })
+                map.lineLabels[labelIndex] = label
+            end
+            label:ClearAllPoints()
+            -- At the midpoint, lifted clear of the dots.
+            label:SetPoint("CENTER", room, "BOTTOMLEFT", (x1 + x2) / 2, (y1 + y2) / 2 + 8)
+            label:SetText(line.label)
+            label:Show()
+            labelIndex = labelIndex + 1
+        end
+    end
+
+    for i = dotIndex, #map.lineDots do map.lineDots[i]:Hide() end
+    for i = labelIndex, #map.lineLabels do map.lineLabels[i]:Hide() end
+end
+
+-- ---------------------------------------------------------------------------
 -- Render
 --
 -- opts.assignments  slot id -> player name
@@ -234,6 +298,7 @@ function PosMap:Render(map, layoutKey, opts)
     end
 
     self:DrawZones(map, layout.zones)
+    self:DrawLines(map, layout.lines)
 
     local assignments = opts.assignments or {}
     local me = opts.mine and PPRC.Adapter:StripRealm(opts.mine) or nil

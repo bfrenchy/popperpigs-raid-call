@@ -109,6 +109,13 @@ As with Hyjal, sourced is not verified. What remains open:
   the first machine-checkable data in the repo, so a future `/pprc scan` extension could
   verify them directly.
 
+Positioning is sourced the same way: every Black Temple layout in `Data/Positions.lua` is
+traced from the guide's own screenshots. Coordinates are read off a picture rather than
+measured in game, so they are *relative* placement — "west of him, clear of the Flame
+Crash" is the claim, not a yardage. The drawn radii that do carry a number (Illidan's
+15-yard Aura of Dread, the 20-yard Shadow Blast note) come from the guide's spell text,
+not from the diagram.
+
 One claim was *removed* rather than kept: Illidan's phase 5 Shadow Prison came from a web
 summary and the guide does not mention it. Weaker evidence loses to stronger.
 

@@ -104,6 +104,7 @@ PPRC:RegisterInstance({
         name = "Shade of Akama",
         tanks = 3,
         npcID = 22841,
+        posmap = "akama",
         checklist = {
             "A tank on each doorway for the add spawns",
             "Interrupt and purge assignments on the Spiritbinders",
@@ -113,21 +114,21 @@ PPRC:RegisterInstance({
             {
                 id = "channelers", label = "Phase 1 - the six Channelers", detail = "Kill all six to release the Shade",
                 call = "Six Channelers around the Shade, all of them have to die. Tank on every doorway for the spawns -- Sorcerer, Elementalist and Rogue every 35 seconds, a Defender every minute.",
-                advance = "manual",
+                advance = "manual", posmap = "akama",
                 warn = { "TANKS ON THE DOORWAYS", "KILL THE CHANNELERS", "SEED IN THE MIDDLE" },
                 source = SOURCE,
             },
             {
                 id = "adds", label = "Add control", detail = "Spiritbinders heal - Sorcerers cannot be tanked",
                 call = "Interrupt the Spiritbinders' Chain Heal and purge Spirit Mend. Sorcerers cannot be tanked, so just kill them. Casters and healers stay 5 yards off the Defenders or they get Shield Bashed.",
-                advance = "manual",
+                advance = "manual", posmap = "akama",
                 warn = { "INTERRUPT SPIRITBINDERS", "PURGE SPIRIT MEND", "KILL THE SORCERERS", "5 YARDS OFF DEFENDERS" },
                 source = SOURCE,
             },
             {
                 id = "boss", label = "Phase 2 - Shade of Akama", detail = "60 seconds to kill him",
                 call = "Shade is loose. Tanks hold the adds, healers keep the tanks up, lust and burn. Sixty seconds or he kills Akama.",
-                advance = "npc_id", npcID = 22841,
+                advance = "npc_id", npcID = 22841, posmap = "akama",
                 warn = { "ALL ON THE SHADE", "60 SECOND TIMER", "TANKS HOLD ADDS" },
                 source = SOURCE,
                 brief = {
@@ -382,28 +383,28 @@ PPRC:RegisterInstance({
             {
                 id = "phase2", label = "Phase 2 - Flames of Azzinoth", detail = "65% - two elementals, capped fire resist tanks",
                 call = "Flame tanks take one each and kite them on the arcs -- never let a Flame breathe on the raid, and NEVER let one get 25 yards from its glaive or we wipe. Ranged and healers into your three marked groups. Dodge the blue Eye Blast as it is drawn.",
-                advance = "health_pct", healthPct = 65, npcID = 22917, posmap = "illidan",
+                advance = "health_pct", healthPct = 65, npcID = 22917, posmap = "illidan_p2",
                 warn = { "FLAME TANKS GO", "DODGE THE BLUE FIRE", "3 GROUPS - SPREAD OUT", "FOCUS ONE FLAME" },
                 source = SOURCE,
             },
             {
                 id = "phase3", label = "Phase 3 - he lands", detail = "Phase 1 abilities plus Agonizing Flames",
                 call = "He is down. Same as phase one but everyone spreads 5 yards for Agonizing Flames. Pick a spot for the Parasitic targets to drop their adds. If we have the damage, lust here and skip demon form.",
-                advance = "manual", posmap = "illidan",
+                advance = "manual", posmap = "illidan_p3",
                 warn = { "SPREAD 5 YARDS", "DROP PARASITICS THERE", "LUST TO SKIP P4" },
                 source = SOURCE,
             },
             {
                 id = "phase4", label = "Phase 4 - demon form", detail = "One minute on a timer, not a health gate",
                 call = "Demon form. Warlock tank takes him and stands 20 yards clear -- Shadow Blast splashes that far. Everyone else spreads 5 yards for Flame Burst and kills the Shadow Demons the second they appear.",
-                advance = "manual", posmap = "illidan",
+                advance = "manual", posmap = "illidan_p4",
                 warn = { "WARLOCK TANK 20 YARDS", "SPREAD 5 YARDS", "KILL SHADOW DEMONS" },
                 source = SOURCE,
             },
             {
                 id = "phase5", label = "Phase 5 - Maiev", detail = "30% - enrage 40 seconds in, then the traps",
                 call = "Thirty percent. He enrages 40 seconds in, so save cooldowns for it. Everyone watch for Maiev's traps and call the region -- MT kites him into one, the enrage drops and he takes extra damage. Glaives are MT priority.",
-                advance = "health_pct", healthPct = 30, npcID = 22917, posmap = "illidan",
+                advance = "health_pct", healthPct = 30, npcID = 22917, posmap = "illidan_p5",
                 warn = { "ENRAGE INCOMING", "CALL THE TRAP", "KITE HIM TO IT", "COOLDOWNS NOW" },
                 source = SOURCE,
                 brief = {

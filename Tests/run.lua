@@ -1941,18 +1941,18 @@ local function suitePosMap(profile, opts)
         scenario(opts, function(addon)
             local teron = addon.PosMap:Layout("teron")
             truthy(teron, "layout present")
-            eq(#teron.slots, 4, "four corners")
-            eq(teron.slotsByID.corner_a.where, "NW, by the door", "cardinal plus landmark")
-            eq(teron.slotsByID.corner_a.mark, 8, "skull on corner A")
+            eq(#teron.slots, 5, "five slots")
+            eq(teron.slotsByID.ghost_l.where, "top of the stairs, LEFT side", "landmark, not a bare cardinal")
+            eq(teron.slotsByID.ghost_l.mark, 1, "star on the left drop point")
         end)
     end)
 
     it("reports which positions are still empty", function()
         scenario(opts, function(addon)
-            eq(#addon.PosMap:EmptySlots("teron", {}), 4, "all empty")
-            eq(#addon.PosMap:EmptySlots("teron", { corner_a = "Vexmoor", corner_b = "Aeliswyn" }), 2, "two filled")
+            eq(#addon.PosMap:EmptySlots("teron", {}), 5, "all empty")
+            eq(#addon.PosMap:EmptySlots("teron", { ghost_l = "Vexmoor", ghost_r = "Aeliswyn" }), 3, "two filled")
             eq(#addon.PosMap:EmptySlots("teron", {
-                corner_a = "A", corner_b = "B", corner_c = "C", corner_d = "D" }), 0, "all filled")
+                mt = "A", melee = "B", healers = "C", ghost_l = "D", ghost_r = "E" }), 0, "all filled")
         end)
     end)
 
@@ -1960,7 +1960,7 @@ local function suitePosMap(profile, opts)
         scenario(opts, function(addon)
             local map = addon.PosMap:Create(_G.UIParent, {})
             truthy(addon.PosMap:Render(map, "teron", {}), "known layout renders")
-            eq(map.landmarks.top:GetText(), "ENTRANCE / DOOR", "landmark drawn")
+            eq(map.landmarks.top:GetText(), "TOP OF THE STAIRS", "landmark drawn")
             eq(map.bossLabel:GetText(), "TERON", "boss labelled")
             eq(map.slots[1].who:GetText(), "- empty -", "empty slot flagged")
 
@@ -1977,12 +1977,12 @@ local function suitePosMap(profile, opts)
                 { name = "Aeliswyn",  class = "MAGE" },
             })
             local applied, failed = addon.PosMap:ApplyMarks("teron",
-                { corner_a = "Vexmoor", corner_b = "Aeliswyn" })
+                { ghost_l = "Vexmoor", ghost_r = "Aeliswyn" })
 
             eq(applied, 2, "both marked")
             eq(failed, 0, "no failures")
-            eq(env.marks.raid2, 8, "Vexmoor got the skull")
-            eq(env.marks.raid3, 7, "Aeliswyn got the cross")
+            eq(env.marks.raid2, 1, "Vexmoor got the star")
+            eq(env.marks.raid3, 3, "Aeliswyn got the diamond")
         end)
     end)
 
@@ -1994,7 +1994,7 @@ local function suitePosMap(profile, opts)
             })
             env.raidTargetsBlocked = true
 
-            local applied, failed = addon.PosMap:ApplyMarks("teron", { corner_a = "Vexmoor" })
+            local applied, failed = addon.PosMap:ApplyMarks("teron", { ghost_l = "Vexmoor" })
             eq(applied, 0, "nothing applied")
             eq(failed, 1, "and it said so")
         end)
@@ -2003,7 +2003,7 @@ local function suitePosMap(profile, opts)
     it("counts someone who left the raid as a failure, not a mark", function()
         scenario(opts, function(addon, env)
             env.buildRaid({ { name = "Popperpig", class = "WARRIOR", rank = 2, isPlayer = true } })
-            local applied, failed = addon.PosMap:ApplyMarks("teron", { corner_a = "Ghostperson" })
+            local applied, failed = addon.PosMap:ApplyMarks("teron", { ghost_l = "Ghostperson" })
             eq(applied, 0, "nobody to mark")
             eq(failed, 1, "reported")
         end)
@@ -2020,11 +2020,12 @@ local function suiteRosterUI(profile, opts)
             { name = "Aeliswyn",  class = "MAGE",    role = "DAMAGER" },
             { name = "Kethran",   class = "HUNTER" },   -- role NONE
             { name = "Brannoc",   class = "ROGUE",   role = "DAMAGER" },
+            { name = "Sorrelin",  class = "PRIEST",  role = "HEALER" },
         })
     end
 
     -- The plan's own M6 acceptance scenario.
-    it("drags four raiders onto Teron corners and pushes", function()
+    it("drags five raiders onto the Teron diagram and pushes", function()
         scenario(opts, function(addon, env)
             teronRaid(env)
             registerTeronFixture(addon)
@@ -2033,17 +2034,18 @@ local function suiteRosterUI(profile, opts)
             addon.State.testMode = false
             addon.RosterUI:Show()
 
-            addon.RosterUI:Select("Vexmoor");  addon.RosterUI:OnSlotClick("corner_a")
-            addon.RosterUI:Select("Aeliswyn"); addon.RosterUI:OnSlotClick("corner_b")
-            addon.RosterUI:Select("Kethran");  addon.RosterUI:OnSlotClick("corner_c")
-            addon.RosterUI:Select("Brannoc");  addon.RosterUI:OnSlotClick("corner_d")
+            addon.RosterUI:Select("Vexmoor");  addon.RosterUI:OnSlotClick("ghost_l")
+            addon.RosterUI:Select("Aeliswyn"); addon.RosterUI:OnSlotClick("ghost_r")
+            addon.RosterUI:Select("Kethran");  addon.RosterUI:OnSlotClick("mt")
+            addon.RosterUI:Select("Brannoc");  addon.RosterUI:OnSlotClick("melee")
+            addon.RosterUI:Select("Sorrelin"); addon.RosterUI:OnSlotClick("healers")
 
             local assignments = addon.Roster:Assignments()
-            eq(assignments.corner_a, "Vexmoor", "corner A")
-            eq(assignments.corner_d, "Brannoc", "corner D")
+            eq(assignments.ghost_l, "Vexmoor", "left drop point")
+            eq(assignments.melee, "Brannoc", "melee")
             eq(#addon.PosMap:EmptySlots("teron", assignments), 0, "no gaps")
 
-            truthy(addon.RosterUI:Push(), "pushed with every corner filled")
+            truthy(addon.RosterUI:Push(), "pushed with every slot filled")
             drainAddon(env, addon)
             truthy(#env.addonMessages > 0, "assignments went out")
         end)
@@ -2058,11 +2060,11 @@ local function suiteRosterUI(profile, opts)
             addon.State.testMode = false
             addon.RosterUI:Show()
 
-            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("corner_a")
+            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("ghost_l")
 
             falsy(addon.RosterUI:Push(), "first push refused")
             eq(addon.RosterUI.pushBtn._label:GetText(), "PUSH ANYWAY?", "asks for confirmation")
-            truthy(addon.RosterUI.footerNote:GetText():find("3 positions still empty", 1, true), "says how many")
+            truthy(addon.RosterUI.footerNote:GetText():find("4 positions still empty", 1, true), "says how many")
 
             truthy(addon.RosterUI:Push(), "second push goes through")
         end)
@@ -2076,12 +2078,12 @@ local function suiteRosterUI(profile, opts)
             addon.State:GoToStep(2, "local")
             addon.RosterUI:Show()
 
-            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("corner_a")
-            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("corner_c")
+            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("ghost_l")
+            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("ghost_r")
 
             local assignments = addon.Roster:Assignments()
-            isNil(assignments.corner_a, "left the old corner")
-            eq(assignments.corner_c, "Vexmoor", "took the new one")
+            isNil(assignments.ghost_l, "left the old spot")
+            eq(assignments.ghost_r, "Vexmoor", "took the new one")
         end)
     end)
 
@@ -2093,11 +2095,11 @@ local function suiteRosterUI(profile, opts)
             addon.State:GoToStep(2, "local")
             addon.RosterUI:Show()
 
-            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("corner_a")
-            eq(addon.Roster:Assignments().corner_a, "Vexmoor", "assigned")
+            addon.RosterUI:Select("Vexmoor"); addon.RosterUI:OnSlotClick("ghost_l")
+            eq(addon.Roster:Assignments().ghost_l, "Vexmoor", "assigned")
 
-            addon.RosterUI:OnSlotClick("corner_a")
-            isNil(addon.Roster:Assignments().corner_a, "cleared")
+            addon.RosterUI:OnSlotClick("ghost_l")
+            isNil(addon.Roster:Assignments().ghost_l, "cleared")
         end)
     end)
 
@@ -2184,13 +2186,13 @@ local function suiteBriefing(profile, opts)
             })
             registerTeronFixture(addon)
             addon.State:Set("fx_teron", 2, "remote")
-            addon.db.assignments = { corner_a = "Vexmoor", corner_b = "Popperpig" }
+            addon.db.assignments = { ghost_l = "Vexmoor", ghost_r = "Popperpig" }
             addon.Briefing:Show()
 
             truthy(addon.Briefing.posHeading:GetText():find("YOURS IS LIT", 1, true), "raider view")
-            -- corner_b is ours: full alpha. corner_a is someone else's: dimmed.
-            eq(addon.Briefing.map.slots[2].icon:GetAlpha(), 1, "own slot lit")
-            eq(addon.Briefing.map.slots[1].icon:GetAlpha(), 0.25, "others dimmed")
+            -- ghost_r is ours (slot 5): full alpha. ghost_l is someone else's: dimmed.
+            eq(addon.Briefing.map.slots[5].icon:GetAlpha(), 1, "own slot lit")
+            eq(addon.Briefing.map.slots[4].icon:GetAlpha(), 0.25, "others dimmed")
         end)
     end)
 
@@ -2935,6 +2937,181 @@ local function suiteZones(profile, opts)
     end)
 end
 
+local function suiteBTLayouts(profile, opts)
+    group("BT layouts [" .. profile .. "]")
+
+    -- The bug this catches is silent: a step naming a layout that does not
+    -- exist renders an empty panel with no error, so the RL sees a blank
+    -- diagram mid-pull and assumes the addon is broken. Three BT layouts were
+    -- referenced and missing before the diagrams were traced.
+    it("every posmap named anywhere resolves to a real layout", function()
+        scenario(opts, function(addon)
+            for instanceID, instance in pairs(addon.Instances) do
+                for _, encounterID in ipairs(instance.order) do
+                    local encounter = addon:GetEncounter(encounterID)
+                    if encounter.posmap then
+                        truthy(addon.PosMap:Layout(encounter.posmap),
+                            encounterID .. " encounter posmap '" .. encounter.posmap .. "' exists")
+                    end
+                    for _, step in ipairs(encounter.steps) do
+                        if step.posmap then
+                            truthy(addon.PosMap:Layout(step.posmap),
+                                encounterID .. "/" .. step.id .. " posmap '" .. step.posmap .. "' exists")
+                        end
+                    end
+                end
+            end
+        end)
+    end)
+
+    it("every layout slot has coordinates inside the room", function()
+        scenario(opts, function(addon)
+            for key, layout in pairs(addon.Layouts) do
+                for _, slot in ipairs(layout.slots or {}) do
+                    truthy(slot.x > 0 and slot.x < 1 and slot.y > 0 and slot.y < 1,
+                        key .. "/" .. slot.id .. " is on the map")
+                    truthy(slot.where and slot.where ~= "",
+                        key .. "/" .. slot.id .. " tells the raider where to stand")
+                end
+            end
+        end)
+    end)
+
+    -- Illidan's five diagrams are five different rooms. Rendering the phase 1
+    -- picture during the demon phase would put melee on top of a 15 yard aura.
+    it("gives Illidan a layout per phase", function()
+        scenario(opts, function(addon)
+            local illidan = addon:GetEncounter("bt_illidan")
+            local seen = {}
+            for _, step in ipairs(illidan.steps) do seen[step.posmap] = true end
+            for _, key in ipairs({ "illidan", "illidan_p2", "illidan_p3", "illidan_p4", "illidan_p5" }) do
+                truthy(seen[key], key .. " is used by a step")
+                truthy(addon.PosMap:Layout(key), key .. " exists")
+            end
+        end)
+    end)
+
+    it("keeps the warlock 20 yards clear in demon form", function()
+        scenario(opts, function(addon)
+            local p4 = addon.PosMap:Layout("illidan_p4")
+            truthy(p4.slotsByID.warlock.where:find("20 yards", 1, true), "Shadow Blast splash respected")
+            local aura
+            for _, zone in ipairs(p4.zones) do
+                if zone.label and zone.label:find("Aura of Dread", 1, true) then aura = zone end
+            end
+            truthy(aura, "Aura of Dread is drawn")
+            truthy(p4.slotsByID.melee.where:upper():find("OFF HIM", 1, true), "melee are told to back off")
+        end)
+    end)
+
+    -- Both of these replaced shapes I invented before the guide arrived.
+    it("uses the guide's two Teron drop points, not four corners", function()
+        scenario(opts, function(addon)
+            local teron = addon.PosMap:Layout("teron")
+            truthy(teron.slotsByID.ghost_l and teron.slotsByID.ghost_r, "two drop points")
+            falsy(teron.slotsByID.corner_c, "the invented back-wall corners are gone")
+            truthy(teron.slotsByID.ghost_l.where:lower():find("stairs", 1, true), "at the top of the stairs")
+        end)
+    end)
+
+    it("stacks Shahraz rather than scattering her raid", function()
+        scenario(opts, function(addon)
+            local shahraz = addon.PosMap:Layout("shahraz")
+            falsy(shahraz.slotsByID.spot_1, "the invented four scatter spots are gone")
+            truthy(shahraz.slotsByID.tanks.label:lower():find("stacked", 1, true), "tanks stack for Saber Lash")
+            -- Tanks are exempt from shadow resistance; a diagram that told them
+            -- otherwise would undo the correction in the encounter data.
+            truthy(shahraz.slotsByID.tanks.where:lower():find("not shadow resist", 1, true),
+                "tanks are still told to skip shadow resistance")
+            truthy(shahraz.slotsByID.ranged.where:lower():find("fish statue", 1, true), "ranged get their landmark")
+        end)
+    end)
+
+    it("draws Gurtogg's soak line and the group either side of it", function()
+        scenario(opts, function(addon)
+            local gurtogg = addon.PosMap:Layout("bloodboil")
+            truthy(gurtogg.lines and gurtogg.lines[1], "the line exists")
+            eq(gurtogg.lines[1].label, "SOAK LINE", "labelled")
+
+            -- Three waiting groups on the far side, one soak spot across it.
+            truthy(gurtogg.slotsByID.group_1.x < gurtogg.lines[1].x1, "group 1 waits on the far side")
+            truthy(gurtogg.slotsByID.group_2.x < gurtogg.lines[1].x1, "group 2 waits on the far side")
+            truthy(gurtogg.slotsByID.group_3.x < gurtogg.lines[1].x1, "group 3 waits on the far side")
+            truthy(gurtogg.slotsByID.soak.x > gurtogg.lines[1].x1, "the soak spot is over the line")
+
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            addon.PosMap:Render(map, "bloodboil", {})
+            truthy(#map.lineDots > 0, "line rendered")
+            truthy(map.lineLabels[1]:GetText():find("SOAK", 1, true), "label rendered")
+        end)
+    end)
+
+    it("hides the line on a layout that has none", function()
+        scenario(opts, function(addon)
+            local map = addon.PosMap:Create(_G.UIParent, {})
+            addon.PosMap:Render(map, "bloodboil", {})
+            addon.PosMap:Render(map, "najentus", {})
+            for _, dot in ipairs(map.lineDots) do falsy(dot:IsShown(), "dots hidden") end
+            for _, label in ipairs(map.lineLabels) do falsy(label:IsShown(), "labels hidden") end
+        end)
+    end)
+
+    it("draws the Eye Blast as a line across phase 2", function()
+        scenario(opts, function(addon)
+            local p2 = addon.PosMap:Layout("illidan_p2")
+            truthy(p2.lines and p2.lines[1].label == "EYE BLAST", "the trail is drawn")
+            -- The three marked groups are what the guide asks the RL to name.
+            truthy(p2.slotsByID.group_1 and p2.slotsByID.group_2 and p2.slotsByID.group_3,
+                "three marked groups")
+            truthy(p2.slotsByID.flame_w.where:lower():find("fire resist", 1, true),
+                "flame tanks are reminded about fire resistance")
+        end)
+    end)
+
+    it("puts Zerevor's mage tank away from everyone", function()
+        scenario(opts, function(addon)
+            local council = addon.PosMap:Layout("council")
+            local mage = council.slotsByID.mage_tank
+            truthy(mage, "the mage tank has a slot")
+            truthy(mage.label:lower():find("mage", 1, true), "named as the mage tank")
+            -- Arcane Explosion is 10 yards, so distance from the pile is the point.
+            truthy(math.abs(mage.x - council.boss.x) > 0.4, "far from the cleave pile")
+        end)
+    end)
+
+    it("marks the Reliquary spread and the closest-gets-hit band", function()
+        scenario(opts, function(addon)
+            local reliquary = addon.PosMap:Layout("reliquary")
+            local labels = {}
+            for _, zone in ipairs(reliquary.zones or {}) do labels[#labels + 1] = zone.label or "" end
+            local joined = table.concat(labels, " | "):lower()
+            truthy(joined:find("closest", 1, true), "the no-threat-table band is drawn")
+            truthy(joined:find("spread", 1, true), "the ranged spread is drawn")
+            truthy(reliquary.slotsByID.tank_in.where:lower():find("closest", 1, true),
+                "the active tank is told to be closest")
+        end)
+    end)
+
+    it("names the doorway tanks on Akama", function()
+        scenario(opts, function(addon)
+            local akama = addon.PosMap:Layout("akama")
+            truthy(akama.slotsByID.left_tank.where:lower():find("door", 1, true), "left doorway")
+            truthy(akama.slotsByID.right_tank.where:lower():find("door", 1, true), "right doorway")
+            truthy(akama.slotsByID.left_tank.x < 0.25 and akama.slotsByID.right_tank.x > 0.75,
+                "on opposite sides of the room")
+        end)
+    end)
+
+    it("warns that healthy melee eat Supremus's Hateful Strike", function()
+        scenario(opts, function(addon)
+            local supremus = addon.PosMap:Layout("supremus")
+            truthy(supremus.slotsByID.melee.where:lower():find("hateful strike", 1, true),
+                "the melee slot carries the warning")
+            truthy(supremus.slotsByID.kite, "the phase 2 kite lead has a slot")
+        end)
+    end)
+end
+
 local function suiteRoute(profile, opts)
     group("BT route [" .. profile .. "]")
 
@@ -3131,6 +3308,7 @@ for _, profile in ipairs(PROFILES) do
     suiteMobPanel(profile.name, profile.opts)
     suiteZones(profile.name, profile.opts)
     suiteBlackTemple(profile.name, profile.opts)
+    suiteBTLayouts(profile.name, profile.opts)
     suiteRoute(profile.name, profile.opts)
     suiteRoles(profile.name, profile.opts)
     suiteWeakAuras(profile.name, profile.opts)
