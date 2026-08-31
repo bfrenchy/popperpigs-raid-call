@@ -55,9 +55,22 @@ If auto-detection misses (WoW on another drive, a custom install path), pass the
 scripts/install.sh "/path/to/World of Warcraft/_anniversary_/Interface/AddOns"
 ```
 
-To install by hand, copy `PopperpigRaidCall.toc`, `Core/`, `Data/` and `UI/` into a folder
-named exactly `PopperpigRaidCall`. On Windows without Git Bash or WSL, hand-copying is the
-route — the script is bash.
+### Windows
+
+`scripts/install.sh` is bash, so on Windows use the PowerShell twin instead:
+
+```powershell
+git clone --branch claude/new-session-j2n302 https://github.com/bfrenchy/popperpigs-raid-call.git
+cd popperpigs-raid-call
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+It enumerates every fixed drive rather than assuming `C:`, so a WoW install on `D:` or `E:`
+is found without being told. `-Link` makes a directory junction instead of copying (no
+admin rights needed), and `-Target "path"` skips detection.
+
+To install by hand on any platform, copy `PopperpigRaidCall.toc`, `Core/`, `Data/` and
+`UI/` into a folder named exactly `PopperpigRaidCall`.
 
 ### Smoke test, in order
 
