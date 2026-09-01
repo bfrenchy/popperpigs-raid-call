@@ -7,6 +7,43 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — the HUD cycled between waves during a live Hyjal night
+
+**Reported from an actual raid, and it was my design error, not a tuning problem.**
+
+Detection keyed off any NPC id named on a step, including the `npcIDs` list on a wave —
+but that list is the *pack composition* for the mob panel. It says what you are fighting,
+not where you are. **Ghoul 17916 appears in 24 of the 32 Hyjal waves**, and `byNPC` was a
+single-slot map, so it silently resolved to whichever step registered last.
+
+Azgalor is the fourth encounter registered, so most shared trash ids ended up pointing at
+*Azgalor's own waves* — 17916 to wave 7, 17897 to wave 8, 17906 to wave 2. Standing in one
+Azgalor wave, every alternation in the combat log threw the HUD to a different one. On the
+earlier bosses it would have jumped to the wrong boss entirely.
+
+Three changes:
+
+- **Only a step that actually advances on an npc id may be keyed by one.** A wave advances
+  on the world state, so its mob list no longer touches state at all.
+- **A shared id is disarmed rather than resolved.** Two claims on different targets mark
+  the id ambiguous and it moves nothing. Ids stay in `knownNPC`, so `/pprc scan` still
+  tells "not in Data/" apart from "known, but deliberately not a key".
+- **Detection can carry the night forward, never backwards.** A straggler cannot rewind
+  the HUD mid-fight; going back stays deliberate (`/pprc back`).
+
+- **New: `/pprc auto`** turns automatic detection off entirely, leaving only ADVANCE and
+  `/pprc next`. Last night there was no way to stop this short of uninstalling. Detection
+  is a convenience; the raid leader clicking Next is the guarantee, and now you can fall
+  back to it on the spot.
+- **`/pprc debug` now says when waves are on manual.** They only move by themselves once
+  the world-state classifier resolves (spike S2, still open). That is the documented
+  fallback rather than a fault — but an RL who does not know it thinks the addon is dead.
+
+The test that should have caught this asserted the bug instead: it checked the ghoul id
+*was* indexed. It now asserts the opposite, alongside a replay of the live failure — five
+rounds of ghoul, crypt fiend and necromancer through the combat log while parked on
+Azgalor wave 3, expecting the step not to move.
+
 ### The guides' own diagrams now ship with the addon
 
 Every positioning diagram has a **GUIDE** button that swaps the drawn map for the

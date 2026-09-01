@@ -291,6 +291,10 @@ PPRC.defaults = {
     -- Manual checklist ticks for things the API cannot read (plan §9).
     checklist   = {},
 
+    -- Detection may drive the HUD. Turn this off and only /pprc next moves it,
+    -- which is the guarantee the whole design rests on.
+    autoAdvance = true,
+
     -- Guide screenshots off by default: the drawn diagram is the one that
     -- carries live assignment names, and that is the everyday view.
     showGuide   = false,

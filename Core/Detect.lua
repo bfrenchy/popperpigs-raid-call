@@ -168,7 +168,7 @@ function Detect:OnWorldStateUpdate()
         end
     end
 
-    if not PPRC.State:IsController() then return end
+    if not self:MayDrive() then return end
 
     local values = history[self.waveSlot]
     if not values or #values == 0 then return end
@@ -197,6 +197,30 @@ end
 -- else in the instance.
 -- ---------------------------------------------------------------------------
 
+-- Detection may carry the night forward. It may not drag it backwards.
+--
+-- Even with ambiguity removed, a straggler from the previous pull or a boss id
+-- seen during its own trash could otherwise rewind the HUD mid-fight, and the
+-- raid leader watching a step jump backwards has no way to tell whether the
+-- addon or the raid is wrong. Going back is deliberate: /pprc back.
+-- The kill switch.
+--
+-- Auto-advance drove a live raid into the wrong wave repeatedly and there was
+-- no way to stop it without uninstalling. Detection is a convenience; the raid
+-- leader clicking Next is the guarantee. So it can be switched off, and every
+-- detect-sourced write asks here first.
+function Detect:MayDrive()
+    if PPRC.db and PPRC.db.autoAdvance == false then return false end
+    return PPRC.State:IsController()
+end
+
+function Detect:MayAdvanceTo(target)
+    if not target then return false end
+    if target.encounter ~= PPRC.State.encounterID then return true end   -- new fight
+    if not target.step then return true end
+    return target.step >= (PPRC.State.stepIndex or 0)
+end
+
 function Detect:OnCombatLog()
     local units = PPRC.Adapter:CombatLogUnits()
     if #units == 0 then return end
@@ -210,16 +234,23 @@ function Detect:OnCombatLog()
         -- unknown id in Hyjal is exactly what needs recording.
         if name and not self.seenNPCs[npcID] then
             self.seenNPCs[npcID] = name
+            local known = instance and instance.knownNPC[npcID]
             PPRC:Log("saw NPC %d (%s)%s", npcID, name,
-                (instance and instance.byNPC[npcID]) and "" or " |cffcda23f- not in Data/|r")
+                known and "" or " |cffcda23f- not in Data/|r")
         end
 
         -- The combat log fires constantly. Only act when the id we are looking
         -- at actually changed, or this would re-set state hundreds of times a
         -- second for the same pack.
+        --
+        -- byNPC now holds only ids that uniquely identify one target, and only
+        -- from steps that actually advance on an npc id. A wave's mob list is
+        -- composition, not position: Ghoul 17916 appears in 24 Hyjal waves, and
+        -- keying off it made the combat log shuffle the HUD between waves of
+        -- entirely different bosses while the raid stood in one of them.
         if instance and npcID ~= self.lastNPC and instance.byNPC[npcID] then
             self.lastNPC = npcID
-            if PPRC.State:IsController() then
+            if self:MayDrive() and self:MayAdvanceTo(instance.byNPC[npcID]) then
                 PPRC.State:GoToNPC(npcID, instance, "detect")
             end
         end
@@ -248,7 +279,7 @@ function Detect:OnStateChanged()
 end
 
 function Detect:PollHealth()
-    if not PPRC.State:IsController() then return end
+    if not self:MayDrive() then return end
 
     local nextStep = PPRC.State:Next()
     if not nextStep or nextStep.advance ~= PPRC.ADVANCE.HEALTH_PCT then return end
@@ -337,9 +368,27 @@ function Detect:TierReport()
     local known, unknown = 0, 0
     local instance = PPRC.State.instance
     for npcID in pairs(self.seenNPCs) do
-        if instance and instance.byNPC[npcID] then known = known + 1 else unknown = unknown + 1 end
+        if instance and instance.knownNPC[npcID] then known = known + 1 else unknown = unknown + 1 end
     end
     lines[#lines + 1] = string.format("NPCs seen .......... %d known, |cffcda23f%d not in Data/|r", known, unknown)
+
+    if instance then
+        lines[#lines + 1] = string.format(
+            "npc detection ...... %d ids may move state, %d disarmed as ambiguous",
+            instance.npcKeyCount or 0, instance.npcAmbiguousCount or 0)
+    end
+
+    lines[#lines + 1] = "auto-advance ....... " ..
+        ((PPRC.db and PPRC.db.autoAdvance == false)
+            and "|cffc1544aOFF|r - /pprc next only. /pprc auto to re-enable"
+            or "|cff3fae6fon|r - /pprc auto to turn it off")
+
+    -- Waves only move by themselves once the classifier resolves. Until then
+    -- this is not a fault, it is the documented fallback -- but the RL needs to
+    -- know that Next is the only thing moving the HUD.
+    if self.waveMode == nil or self.waveMode == "MANUAL" then
+        lines[#lines + 1] = "|cffcda23fwaves are on manual: click ADVANCE, they will not move on their own|r"
+    end
 
     return lines
 end

@@ -379,12 +379,141 @@ local function suiteState(profile, opts)
         end)
     end)
 
-    it("indexes every step's NPC ids for combat-log lookup", function()
+    -- This test used to assert `byNPC[17916]` was indexed -- it encoded the bug
+    -- rather than catching it. Ghoul 17916 appears in 24 Hyjal wave steps, so a
+    -- single-slot map resolved it to whichever registered last, and in a live
+    -- raid the combat log shuffled the HUD between Azgalor's waves 2, 7 and 8
+    -- while the raid stood in one of them.
+    it("keys detection on boss ids only, never on shared trash ids", function()
         scenario(opts, function(addon)
             local hyjal = addon.Instances.hyjal
-            eq(hyjal.byNPC[17767].encounter, "hyjal_winterchill", "winterchill boss id")
-            eq(hyjal.byNPC[17968].encounter, "hyjal_archimonde", "archimonde boss id")
-            truthy(hyjal.byNPC[17916], "ghoul trash id indexed")
+            eq(hyjal.byNPC[17767].encounter, "hyjal_winterchill", "winterchill boss id keys")
+            eq(hyjal.byNPC[17968].encounter, "hyjal_archimonde", "archimonde boss id keys")
+
+            -- Not merely deduplicated: a wave's mob list never claims a key at
+            -- all, because composition says what you are fighting, not where
+            -- you are. So the ghoul cannot move state...
+            isNil(hyjal.byNPC[17916], "ghoul CANNOT move state")
+            -- ...but is still on file, so /pprc scan does not cry "not in Data/"
+            -- at a mob we deliberately chose not to key off.
+            truthy(hyjal.knownNPC[17916], "and is still known to the scan report")
+        end)
+    end)
+
+    -- ambiguousNPC is empty against the shipped data, by design. It is the net
+    -- for a future edit that keys two different steps off one id -- the exact
+    -- mistake that cost a raid night -- so it is tested on a fixture.
+    it("refuses to key one id to two different steps", function()
+        scenario(opts, function(addon)
+            addon:RegisterInstance({
+                id = "fx_dupe", name = "Fixture",
+                order = { "fx_a" },
+                encounters = {
+                    fx_a = {
+                        name = "Fixture", steps = {
+                            { id = "one", label = "One", advance = "npc_id", npcID = 4242 },
+                            { id = "two", label = "Two", advance = "npc_id", npcID = 4242 },
+                        },
+                    },
+                },
+            })
+            local def = addon.Instances.fx_dupe
+            truthy(def.ambiguousNPC[4242], "conflict recorded")
+            isNil(def.byNPC[4242], "and the id is disarmed rather than picking a winner")
+            truthy(def.knownNPC[4242], "still known")
+        end)
+    end)
+
+    it("leaves no wave step reachable by a shared mob id", function()
+        scenario(opts, function(addon)
+            for _, instance in pairs(addon.Instances) do
+                for npcID, target in pairs(instance.byNPC) do
+                    if target.step then
+                        local encounter = addon:GetEncounter(target.encounter)
+                        local step = encounter.steps[target.step]
+                        eq(step.advance, addon.ADVANCE.NPC_ID,
+                            string.format("%d keys %s/%s, which advances on npc_id",
+                                npcID, target.encounter, step.id))
+                    end
+                end
+            end
+        end)
+    end)
+
+    -- The exact shape of the live failure, replayed.
+    it("holds position while a mixed Azgalor wave churns through the log", function()
+        scenario(opts, function(addon, env)
+            env.instance = { name = "The Battle for Mount Hyjal", mapID = 534 }
+            addon.Detect:CheckZone()
+            addon.State:Set("hyjal_azgalor", 3, "local")
+
+            -- One wave, three mob types, all shared across the instance.
+            for _ = 1, 5 do
+                env.combatLog("SPELL_DAMAGE", "Creature-0-1-534-0-17916-1", "Ghoul",
+                    "Player-0-1", "Popperpig")
+                env.combatLog("SPELL_DAMAGE", "Creature-0-1-534-0-17897-1", "Crypt Fiend",
+                    "Player-0-1", "Popperpig")
+                env.combatLog("SPELL_DAMAGE", "Creature-0-1-534-0-17899-1", "Shadowy Necromancer",
+                    "Player-0-1", "Popperpig")
+            end
+
+            eq(addon.State.encounterID, "hyjal_azgalor", "still on Azgalor")
+            eq(addon.State.stepIndex, 3, "still on the wave the raid is actually fighting")
+        end)
+    end)
+
+    it("still lets a boss appearing mid-trash surface its encounter", function()
+        scenario(opts, function(addon, env)
+            env.instance = { name = "The Battle for Mount Hyjal", mapID = 534 }
+            addon.Detect:CheckZone()
+            addon.State:Set("hyjal_azgalor", 3, "local")
+
+            env.combatLog("SPELL_DAMAGE", "Creature-0-1-534-0-17842-1", "Azgalor",
+                "Player-0-1", "Popperpig")
+            eq(addon.State.encounterID, "hyjal_azgalor", "same encounter")
+            truthy(addon.State.stepIndex > 3, "moved forward onto the boss step")
+        end)
+    end)
+
+    it("stops moving the HUD entirely when auto-advance is off", function()
+        scenario(opts, function(addon, env)
+            env.instance = { name = "The Battle for Mount Hyjal", mapID = 534 }
+            addon.Detect:CheckZone()
+            addon.State:Set("hyjal_azgalor", 3, "local")
+            addon.db.autoAdvance = false
+
+            -- Even a boss id, which is a legitimate unambiguous key.
+            env.combatLog("SPELL_DAMAGE", "Creature-0-1-534-0-17842-1", "Azgalor",
+                "Player-0-1", "Popperpig")
+            eq(addon.State.stepIndex, 3, "detection held its hands up")
+
+            -- The RL still drives, which is the point of the switch.
+            addon.State:Advance("local")
+            eq(addon.State.stepIndex, 4, "manual control unaffected")
+        end)
+    end)
+
+    it("says on the debug report when waves will not move by themselves", function()
+        scenario(opts, function(addon, env)
+            env.instance = { name = "The Battle for Mount Hyjal", mapID = 534 }
+            addon.Detect:CheckZone()
+            local report = table.concat(addon.Detect:TierReport(), "\n")
+            -- Unclassified waves are the documented fallback, not a fault -- but
+            -- an RL who does not know that thinks the addon is dead.
+            truthy(report:find("waves are on manual", 1, true), "the report says so plainly")
+            truthy(report:find("disarmed as ambiguous", 1, true), "and reports the npc key count")
+        end)
+    end)
+
+    it("never lets detection drag the night backwards", function()
+        scenario(opts, function(addon)
+            addon.State:Set("hyjal_azgalor", 6, "local")
+            falsy(addon.Detect:MayAdvanceTo({ encounter = "hyjal_azgalor", step = 2 }),
+                "a stale id cannot rewind the HUD mid-fight")
+            truthy(addon.Detect:MayAdvanceTo({ encounter = "hyjal_azgalor", step = 8 }),
+                "forward is fine")
+            truthy(addon.Detect:MayAdvanceTo({ encounter = "hyjal_archimonde", step = 1 }),
+                "a different fight is always allowed")
         end)
     end)
 

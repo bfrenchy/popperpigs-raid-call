@@ -32,10 +32,48 @@ PPRC.ADVANCE = {
     MANUAL     = "manual",       -- the RL clicks Next
 }
 
+-- Record an id as a detection key, or as ambiguous if something else already
+-- claimed it for a different target. Two claims on the SAME target -- an
+-- encounter's boss id and that encounter's own boss step -- are not a conflict.
+local function claim(def, npcID, encounterID, stepIndex)
+    def.knownNPC[npcID] = true
+
+    if def.ambiguousNPC[npcID] then return end
+
+    local existing = def.byNPC[npcID]
+    if existing then
+        local sameTarget = existing.encounter == encounterID
+            and (existing.step == stepIndex or existing.step == nil or stepIndex == nil)
+        if sameTarget then
+            -- Prefer the more specific claim: a step beats a bare encounter.
+            if existing.step == nil and stepIndex ~= nil then
+                existing.step = stepIndex
+            end
+            return
+        end
+        def.ambiguousNPC[npcID] = true
+        def.byNPC[npcID] = nil
+        return
+    end
+
+    def.byNPC[npcID] = { encounter = encounterID, step = stepIndex }
+end
+
 function PPRC:RegisterInstance(def)
     if type(def) ~= "table" or not def.id then return end
 
+    -- byNPC       ids that may MOVE state. Unique, and only from steps that
+    --             actually advance on an npc id.
+    -- knownNPC    every id named anywhere, so /pprc scan can tell "not in
+    --             Data/" from "in Data/ but not a detection key".
+    -- ambiguousNPC ids claimed by more than one target. These are the trap:
+    --             Ghoul 17916 appears in 24 Hyjal waves, so a single-slot map
+    --             silently resolved it to whichever registered last and the
+    --             combat log threw the HUD to a different boss's wave. They
+    --             are recorded and then never used to advance.
     def.byNPC = {}
+    def.knownNPC = {}
+    def.ambiguousNPC = {}
     def.unverified = 0
     def.sourced = 0
     def.verified = 0
@@ -52,7 +90,7 @@ function PPRC:RegisterInstance(def)
             -- A boss NPC seen in the combat log should surface its encounter
             -- even if we are sitting on an earlier trash step.
             if encounter.npcID then
-                def.byNPC[encounter.npcID] = { encounter = encounterID, step = nil }
+                claim(def, encounter.npcID, encounterID, nil)
             end
 
             for i, step in ipairs(encounter.steps or {}) do
@@ -72,13 +110,19 @@ function PPRC:RegisterInstance(def)
                     def.unverified = def.unverified + 1
                 end
 
-                -- A step may key off one id or several (a mixed trash pack).
-                if step.npcID then
-                    def.byNPC[step.npcID] = { encounter = encounterID, step = i }
-                end
-                if step.npcIDs then
-                    for _, id in ipairs(step.npcIDs) do
-                        def.byNPC[id] = { encounter = encounterID, step = i }
+                -- Every id gets recorded as known, for the scan report.
+                if step.npcID then def.knownNPC[step.npcID] = true end
+                for _, id in ipairs(step.npcIDs or {}) do def.knownNPC[id] = true end
+
+                -- ONLY a step that actually advances on an npc id may be keyed
+                -- by one. On a wave step, npcIDs is the pack composition for
+                -- the mob panel -- it says what you are fighting, not where you
+                -- are. Letting it drive state is what made the combat log
+                -- shuffle the HUD between waves of different bosses.
+                if step.advance == PPRC.ADVANCE.NPC_ID then
+                    if step.npcID then claim(def, step.npcID, encounterID, i) end
+                    for _, id in ipairs(step.npcIDs or {}) do
+                        claim(def, id, encounterID, i)
                     end
                 end
 
@@ -90,8 +134,14 @@ function PPRC:RegisterInstance(def)
     self.Instances[def.id] = def
     if def.mapID then self.InstancesByMap[def.mapID] = def end
 
-    self:Log("registered %s: %d steps (%d verified, %d sourced, %d unverified)",
-        def.id, def.total, def.verified, def.sourced, def.unverified)
+    local keys, ambiguous = 0, 0
+    for _ in pairs(def.byNPC) do keys = keys + 1 end
+    for _ in pairs(def.ambiguousNPC) do ambiguous = ambiguous + 1 end
+    def.npcKeyCount = keys
+    def.npcAmbiguousCount = ambiguous
+
+    self:Log("registered %s: %d steps (%d verified, %d sourced, %d unverified), %d npc keys, %d ambiguous",
+        def.id, def.total, def.verified, def.sourced, def.unverified, keys, ambiguous)
 end
 
 function PPRC:GetEncounter(id) return self.Encounters[id] end

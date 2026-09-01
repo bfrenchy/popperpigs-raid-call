@@ -133,6 +133,15 @@ register("config", "/pprc config", "Open the settings panel.", function()
     if PPRC.Options then PPRC.Options:Toggle() end
 end)
 
+register("auto", "/pprc auto", "Turn automatic step detection on or off. Off means only you move the HUD.", function()
+    PPRC.db.autoAdvance = not (PPRC.db.autoAdvance ~= false)
+    if PPRC.db.autoAdvance then
+        PPRC:Print("auto-advance |cff3fae6fon|r - detection may move the HUD")
+    else
+        PPRC:Print("auto-advance |cffc1544aoff|r - nothing moves the HUD but /pprc next and the ADVANCE button")
+    end
+end)
+
 register("lock", "/pprc lock", "Lock or unlock frame dragging.", function()
     PPRC.db.locked = not PPRC.db.locked
     PPRC:Print("frames are now %s", PPRC.db.locked and "|cffc1544alocked|r" or "|cff3fae6funlocked|r")

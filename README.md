@@ -113,6 +113,7 @@ and `Textures/` into a folder named exactly `PopperpigRaidCall`.
 | `/pprc debug` | Capability table, active detection tiers, unverified data count |
 | `/pprc scan` | Live world state and every NPC id seen — the data-correction tool |
 | `/pprc log` | Recent debug log |
+| `/pprc auto` | Turn automatic step detection off — only you move the HUD |
 | `/pprc lock` · `/pprc reset` | Frame dragging and positions |
 
 ---
